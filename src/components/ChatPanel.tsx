@@ -222,7 +222,8 @@ export default function ChatPanel({
     setProvider(next);
     setState("ready");
   };
-  const keepProvidersMounted = performanceMode !== "Low Memory";
+  // Only the explicit instant-switching mode keeps both heavy provider webviews alive.
+  const keepProvidersMounted = performanceMode === "Instant Switching";
 
   return (
     <div

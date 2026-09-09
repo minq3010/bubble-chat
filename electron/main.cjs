@@ -106,6 +106,11 @@ function createBubble() {
   bubbleWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   loadRoute(bubbleWin, "bubble");
   bubbleWin.webContents.on("did-finish-load", () => bubbleWin?.webContents.send("notifications:unread", unreadCounts));
+  bubbleWin.on("blur", () => {
+    if (!isDragging) return;
+    isDragging = false;
+    stopDrag();
+  });
   bubbleWin.on("closed", () => (bubbleWin = null));
 }
 
@@ -319,7 +324,7 @@ ipcMain.on("bubble:dragStart", () => {
     lastBx = nx;
     lastBy = ny;
     bubbleWin.setPosition(nx, ny);
-  }, 10);
+  }, 16);
 });
 ipcMain.on("bubble:dragEnd", () => {
   stopDrag();
