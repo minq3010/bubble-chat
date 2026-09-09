@@ -17,7 +17,7 @@ export default function BubbleWindow() {
   });
 
   const lastClickRef = useRef(0);
-  const startPosRef = useRef<{ x: number; y: number } | null>(null);
+  const startPosRef = useRef<{ screenX: number; screenY: number } | null>(null);
   const isDraggingRef = useRef(false);
 
   useEffect(() => {
@@ -47,17 +47,23 @@ export default function BubbleWindow() {
 
   function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
-    startPosRef.current = { x: event.clientX, y: event.clientY };
+    const target = event.currentTarget;
+    try {
+      target.setPointerCapture(event.pointerId);
+    } catch {}
+
+    // Lưu tọa độ screenX, screenY tuyệt đối trên màn hình để không bị sai lệch khi cửa sổ di chuyển
+    startPosRef.current = { screenX: event.screenX, screenY: event.screenY };
     isDraggingRef.current = false;
 
     const onPointerMove = (moveEvent: PointerEvent) => {
       if (!startPosRef.current) return;
       const distance = Math.hypot(
-        moveEvent.clientX - startPosRef.current.x,
-        moveEvent.clientY - startPosRef.current.y
+        moveEvent.screenX - startPosRef.current.screenX,
+        moveEvent.screenY - startPosRef.current.screenY
       );
-      // Nâng ngưỡng kéo lên 14px để loại bỏ hoàn toàn rung ngón tay trên trackpad macOS
-      if (distance > 14) {
+      // Ngưỡng di chuyển tuyệt đối trên màn hình
+      if (distance > 10) {
         if (!isDraggingRef.current) {
           isDraggingRef.current = true;
           desktop()?.bubbleDragStart();
@@ -65,9 +71,12 @@ export default function BubbleWindow() {
       }
     };
 
-    const onPointerUp = () => {
+    const onPointerUp = (upEvent: PointerEvent) => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      try {
+        target.releasePointerCapture(upEvent.pointerId);
+      } catch {}
 
       if (isDraggingRef.current) {
         isDraggingRef.current = false;

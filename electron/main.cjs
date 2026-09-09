@@ -9,14 +9,14 @@ if (!hasSingleInstanceLock) app.quit();
 
 const BUBBLE = 76; // window size (bubble ~56 + shadow/badge room)
 const PANEL_CONFIG = {
-  defaultWidth: 420,
-  minWidth: 380,
-  maxWidth: 460,
-  widthRatio: 0.29,
-  defaultHeight: 620,
-  minHeight: 540,
-  maxHeight: 720,
-  heightRatio: 0.68,
+  defaultWidth: 365,
+  minWidth: 340,
+  maxWidth: 390,
+  widthRatio: 0.25,
+  defaultHeight: 510,
+  minHeight: 460,
+  maxHeight: 550,
+  heightRatio: 0.57,
 };
 
 let bubbleWin = null;
@@ -333,6 +333,13 @@ ipcMain.on("bubble:dragEnd", () => {
     const [x, y] = bubbleWin.getPosition();
     if (rememberPosition) writeState({ bubblePosition: { x, y } });
   }
+
+  // Tự động xuất hiện lại popup chat phù hợp tại vị trí mới sau khi thả bóng chat
+  if (!panelWin) createPanel();
+  positionPanelNearBubble();
+  panelShowTimestamp = Date.now();
+  panelWin.show();
+  panelWin.focus();
 });
 ipcMain.on("bubble:click", () => {
   stopDrag();
