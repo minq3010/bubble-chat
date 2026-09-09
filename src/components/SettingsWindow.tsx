@@ -262,7 +262,7 @@ function GeneralPane() {
         <ToggleRow
           title="Start at login"
           settingKey="startAtLogin"
-          desc="Launch Bubble automatically when macOS/PC starts."
+          desc="Launch Bubble Chat automatically when macOS/PC starts."
           defaultOn
         />
         <ToggleRow
@@ -281,7 +281,7 @@ function GeneralPane() {
         <ToggleRow
           title="Snap to screen edge"
           settingKey="snapToEdge"
-          desc="Bubble docks to the nearest edge on release."
+          desc="Bubble Chat docks to the nearest edge on release."
           defaultOn
         />
         <ToggleRow
@@ -464,8 +464,8 @@ function AboutPane() {
         <div className="mb-2">
           <AppIcon size={38} />
         </div>
-        <div className="text-[14px] font-semibold text-foreground">Bubble</div>
-        <div className="font-mono text-[10.5px] text-muted-foreground">Messenger + Zalo Desktop</div>
+          <div className="text-[14px] font-semibold text-foreground">Bubble Chat</div>
+          <div className="font-mono text-[10.5px] text-muted-foreground">Messenger + Zalo Desktop</div>
         <button
           type="button"
           onClick={() => setChecked(true)}
@@ -593,7 +593,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
       {/* Footer info in root */}
       {section === null && (
         <div className="border-t border-border/40 bg-card/30 px-3.5 py-2 text-center font-mono text-[10px] text-muted-foreground">
-          Bubble v1.4.0 · Messenger & Zalo
+          Bubble Chat v1.4.0 · Messenger & Zalo
         </div>
       )}
     </div>

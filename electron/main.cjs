@@ -238,9 +238,9 @@ function buildTray() {
     `data:image/svg+xml;base64,${Buffer.from(traySvg).toString("base64")}`,
   );
   tray = new Tray(icon);
-  tray.setToolTip("Bubble — Messenger + Zalo");
+  tray.setToolTip("Bubble Chat — Messenger + Zalo");
   const menu = Menu.buildFromTemplate([
-    { label: "Show / Hide Bubble", click: () => (bubbleWin?.isVisible() ? bubbleWin.hide() : bubbleWin?.show()) },
+    { label: "Show / Hide Bubble Chat", click: () => (bubbleWin?.isVisible() ? bubbleWin.hide() : bubbleWin?.show()) },
     { type: "separator" },
     { label: "Messenger", click: () => openProvider("messenger") },
     { label: "Zalo", click: () => openProvider("zalo") },
@@ -253,7 +253,7 @@ function buildTray() {
     ] },
     { label: "Settings…", click: () => openProvider("settings") },
     { type: "separator" },
-    { label: "Quit Bubble", click: () => app.quit() },
+    { label: "Quit Bubble Chat", click: () => app.quit() },
   ]);
   tray.setContextMenu(menu);
   tray.on("click", () => togglePanel());
@@ -268,7 +268,7 @@ function showBubbleContextMenu() {
     { label: "Hide bubble", click: () => bubbleWin?.hide() },
     { label: "Settings…", click: () => openProvider("settings") },
     { type: "separator" },
-    { label: "Quit Bubble", click: () => app.quit() },
+    { label: "Quit Bubble Chat", click: () => app.quit() },
   ]).popup({ window: bubbleWin });
 }
 
