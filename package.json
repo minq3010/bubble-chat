@@ -2,6 +2,8 @@
   "name": "bubble-chat",
   "private": true,
   "version": "1.0.0",
+  "description": "Bubble Chat desktop app for Messenger and Zalo",
+  "author": "Nguyen Minh Quoc",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -10,11 +12,11 @@
     "format": "oxfmt",
     "electron": "cross-env ELECTRON_RUN_AS_NODE= electron .",
     "electron:dev": "concurrently -k -n vite,electron \"vite --host 0.0.0.0 --port 8443\" \"wait-on tcp:8443 && cross-env ELECTRON_RUN_AS_NODE= VITE_DEV_URL=http://localhost:8443 electron .\"",
-    "build:mac": "cross-env ELECTRON=1 vite build && electron-builder --mac",
-    "build:win": "cross-env ELECTRON=1 vite build && electron-builder --win",
-    "build:linux": "cross-env ELECTRON=1 vite build && electron-builder --linux",
-    "build:all": "cross-env ELECTRON=1 vite build && electron-builder -mw",
-    "electron:build": "cross-env ELECTRON=1 vite build && electron-builder"
+    "build:mac": "cross-env ELECTRON=1 vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never",
+    "build:win": "cross-env ELECTRON=1 vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish never",
+    "build:linux": "cross-env ELECTRON=1 vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --linux --publish never",
+    "build:all": "cross-env ELECTRON=1 vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder -mw --publish never",
+    "electron:build": "cross-env ELECTRON=1 vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish never"
   },
   "build": {
     "appId": "com.bubble.desktop",
