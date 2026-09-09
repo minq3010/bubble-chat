@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* light — warm neutral surfaces */
+  --background: #eceef1;
+  --foreground: #1a1c1f;
+  --card: #ffffff;
+  --card-foreground: #1a1c1f;
+  --panel: #fbfbfc;
+  --muted: #f2f3f5;
+  --muted-foreground: #6b7280;
+  --border: #e3e5e9;
+  --border-strong: #d3d6dc;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --accent: #eef0fe;
+  --ring: #4f46e5;
+
+  --messenger: #0a7cff;
+  --messenger-2: #a033ff;
+  --zalo: #0068ff;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
+
+  --shadow-sm: 0 1px 2px rgba(16, 18, 22, 0.06), 0 1px 1px rgba(16, 18, 22, 0.04);
+  --shadow-md: 0 6px 16px -4px rgba(16, 18, 22, 0.12), 0 2px 6px -2px rgba(16, 18, 22, 0.08);
+  --shadow-lg: 0 24px 48px -12px rgba(16, 18, 22, 0.22), 0 8px 20px -8px rgba(16, 18, 22, 0.14);
+  --radius: 14px;
+}
+
+.dark {
+  /* charcoal, not pure black */
+  --background: #0d0f12;
+  --foreground: #eceef1;
+  --card: #191c21;
+  --card-foreground: #eceef1;
+  --panel: #16181d;
+  --muted: #21252b;
+  --muted-foreground: #9aa1ac;
+  --border: #2a2e35;
+  --border-strong: #363b44;
+  --primary: #7c78f0;
+  --primary-foreground: #0d0f12;
+  --accent: #23252e;
+  --ring: #7c78f0;
+
+  --messenger: #3d96ff;
+  --messenger-2: #b566ff;
+  --zalo: #3b8bff;
+  --success: #34d399;
+  --danger: #f87171;
+  --warning: #fbbf24;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 20px -6px rgba(0, 0, 0, 0.5), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 28px 56px -14px rgba(0, 0, 0, 0.65), 0 10px 24px -8px rgba(0, 0, 0, 0.5);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-panel: var(--panel);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-ring: var(--ring);
+  --color-messenger: var(--messenger);
+  --color-messenger-2: var(--messenger-2);
+  --color-zalo: var(--zalo);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --shadow-e1: var(--shadow-sm);
+  --shadow-e2: var(--shadow-md);
+  --shadow-e3: var(--shadow-lg);
+  --radius-panel: var(--radius);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* hide scrollbars until scrolling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover::-webkit-scrollbar-thumb,
+*:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 99px;
+}

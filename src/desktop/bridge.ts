@@ -1,0 +1,37 @@
+export type DesktopBridge = {
+  isElectron: true;
+  bubbleDragStart: () => void;
+  bubbleDragEnd: () => void;
+  bubbleClick: () => void;
+  showContextMenu: () => void;
+  showBubble: () => void;
+  hideBubble: () => void;
+  openProvider: (which: "messenger" | "zalo" | "settings") => void;
+  quit: () => void;
+  collapsePanel: () => void;
+  openExternal: (url: string) => void;
+  setLoginItem: (enabled: boolean) => void;
+  setAlwaysOnTop: (enabled: boolean) => void;
+  setCloseOnBlur: (enabled: boolean) => void;
+  setShowBubbleOnStartup: (enabled: boolean) => void;
+  setRememberPosition: (enabled: boolean) => void;
+  setSnapToEdge: (enabled: boolean) => void;
+  setPerformanceMode: (mode: string) => void;
+  reportUnread: (provider: "messenger" | "zalo", count: number) => void;
+  onUnread: (cb: (counts: { messenger: number; zalo: number }) => void) => () => void;
+  clearSession: (provider: "messenger" | "zalo" | "cache") => void;
+  openSessionStorage: () => void;
+  onNavigate: (cb: (which: string) => void) => () => void;
+  onPerformance: (cb: (mode: string) => void) => () => void;
+};
+
+declare global {
+  interface Window {
+    desktop?: DesktopBridge;
+  }
+}
+
+export const desktop = (): DesktopBridge | undefined =>
+  typeof window !== "undefined" ? window.desktop : undefined;
+
+export const isElectron = (): boolean => !!desktop()?.isElectron;
