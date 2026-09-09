@@ -9,14 +9,14 @@ if (!hasSingleInstanceLock) app.quit();
 
 const BUBBLE = 76; // window size (bubble ~56 + shadow/badge room)
 const PANEL_CONFIG = {
-  defaultWidth: 380,
-  minWidth: 350,
-  maxWidth: 420,
-  widthRatio: 0.26,
-  defaultHeight: 560,
-  minHeight: 500,
-  maxHeight: 640,
-  heightRatio: 0.62,
+  defaultWidth: 420,
+  minWidth: 380,
+  maxWidth: 460,
+  widthRatio: 0.29,
+  defaultHeight: 620,
+  minHeight: 540,
+  maxHeight: 720,
+  heightRatio: 0.68,
 };
 
 let bubbleWin = null;
