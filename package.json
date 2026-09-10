@@ -25,6 +25,7 @@
   "build": {
     "appId": "com.bubble.desktop",
     "productName": "Bubble Chat",
+    "icon": "public/bubble-chat-icon.png",
     "files": [
       "dist/**/*",
       "electron/**/*"

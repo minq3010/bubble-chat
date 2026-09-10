@@ -8,13 +8,23 @@ export type UpdateInfo = {
   error?: string;
 };
 
+export type AppearanceData = {
+  theme?: string;
+  bubbleSize?: string;
+};
+
 export type DesktopBridge = {
   isElectron: true;
+  platform?: string;
+  copyDeveloperPhone: () => void;
   getAppVersion: () => Promise<string>;
   getUpdateInfo: () => Promise<UpdateInfo>;
   checkForUpdates: () => Promise<UpdateInfo>;
   openUpdateDownload: () => Promise<void>;
   onUpdateStatus: (cb: (info: UpdateInfo) => void) => () => void;
+  getSettings: () => Promise<Record<string, any>>;
+  setAppearance: (data: AppearanceData) => void;
+  onAppearance: (cb: (data: AppearanceData) => void) => () => void;
   bubbleDragStart: () => void;
   bubbleDragEnd: () => void;
   bubbleClick: () => void;
@@ -38,6 +48,7 @@ export type DesktopBridge = {
   openSessionStorage: () => void;
   onNavigate: (cb: (which: string) => void) => () => void;
   onPerformance: (cb: (mode: string) => void) => () => void;
+  onReloadProvider?: (cb: (provider: string) => void) => () => void;
 };
 
 declare global {

@@ -3,23 +3,53 @@ import ChatPanel from "../components/ChatPanel";
 import type { Provider } from "../components/ChatPanel";
 import SettingsWindow from "../components/SettingsWindow";
 import { desktop } from "./bridge";
+import { withTransitionSuppression } from "../utils/theme";
 
 /** Renderer for the frameless, transparent panel window. */
 export default function PanelWindow() {
   const [provider, setProvider] = useState<Provider>("messenger");
   const [view, setView] = useState<"chat" | "settings">("chat");
-  const [theme, setTheme] = useState(() => localStorage.getItem("bubble.theme") || "Dark");
+  const [theme, setTheme] = useState(() => localStorage.getItem("bubble.theme") || "System");
+  const [systemIsDark, setSystemIsDark] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)").matches : true
+  );
 
   useEffect(() => {
     document.documentElement.style.background = "transparent";
     document.body.style.background = "transparent";
 
+    desktop()?.getSettings().then((settings) => {
+      if (settings?.theme) {
+        setTheme((prev) => (prev === settings.theme ? prev : settings.theme));
+      }
+    }).catch(() => {});
+
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onMediaChange = (e: MediaQueryListEvent) => {
+      withTransitionSuppression(() => {
+        setSystemIsDark(e.matches);
+      });
+    };
+    media.addEventListener("change", onMediaChange);
+
+    const offIpc = desktop()?.onAppearance((data) => {
+      if (data.theme) {
+        withTransitionSuppression(() => {
+          setTheme((prev) => (prev === data.theme ? prev : (data.theme || prev)));
+        });
+      }
+    });
+
     const onAppearance = (event: Event) => {
       const value = (event as CustomEvent<{ key: string; value: string }>).detail;
-      if (value.key === "bubble.theme") setTheme(value.value);
+      if (value.key === "bubble.theme") {
+        withTransitionSuppression(() => {
+          setTheme((prev) => (prev === value.value ? prev : value.value));
+        });
+      }
     };
     window.addEventListener("bubble:appearance", onAppearance);
-    const off = desktop()?.onNavigate((which) => {
+    const offNav = desktop()?.onNavigate((which) => {
       if (which === "settings") {
         setView("settings");
       } else if (which === "messenger" || which === "zalo") {
@@ -28,14 +58,24 @@ export default function PanelWindow() {
       }
     });
     return () => {
+      media.removeEventListener("change", onMediaChange);
+      offIpc?.();
       window.removeEventListener("bubble:appearance", onAppearance);
-      off?.();
+      offNav?.();
     };
   }, []);
 
+  const isDark = theme === "Dark" || (theme === "System" && systemIsDark);
+
+  useEffect(() => {
+    withTransitionSuppression(() => {
+      document.documentElement.classList.toggle("dark", isDark);
+    });
+  }, [isDark]);
+
   return (
-    <div className={`${theme !== "Light" ? "dark" : ""} h-screen w-screen`}>
-      <div className="h-full w-full overflow-hidden rounded-[16px] bg-panel shadow-e3">
+    <div className={`${isDark ? "dark" : ""} h-screen w-screen p-[12px] bg-transparent select-none`}>
+      <div className="h-full w-full overflow-hidden rounded-[16px] border border-border/80 bg-panel shadow-e3">
         {view === "settings" ? (
           <SettingsWindow onClose={() => setView("chat")} />
         ) : (

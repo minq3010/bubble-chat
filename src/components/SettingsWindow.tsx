@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Settings2,
   Palette,
@@ -13,10 +13,12 @@ import {
   ChevronRight,
   X,
   RefreshCw,
+  Copy,
 } from "lucide-react";
 import { AppIcon } from "./BrandIcons";
 import { desktop } from "../desktop/bridge";
 import { useAppUpdate } from "../hooks/useAppUpdate";
+import { withTransitionSuppression } from "../utils/theme";
 
 export type Section =
   | "general"
@@ -45,7 +47,7 @@ const SECTIONS: SectionMeta[] = [
   {
     id: "appearance",
     label: "Appearance",
-    desc: "Theme, bubble size, icon style",
+    desc: "Color mode, bubble size",
     icon: Palette,
     accent: "bg-purple-500/15 text-purple-500",
   },
@@ -129,6 +131,17 @@ function ToggleRow({
     }
   });
 
+  useEffect(() => {
+    desktop()?.getSettings().then((settings) => {
+      if (settings && typeof settings[settingKey] === "boolean") {
+        setOn(settings[settingKey]);
+        try {
+          localStorage.setItem(key, String(settings[settingKey]));
+        } catch {}
+      }
+    }).catch(() => {});
+  }, [settingKey, key]);
+
   const toggle = () => {
     setOn((prev) => {
       const next = !prev;
@@ -162,7 +175,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
       <h3 className="mb-1.5 px-1 font-mono text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
         {title}
       </h3>
-      <div className="divide-y divide-border/50 rounded-xl border border-border/70 bg-card/70 px-3.5 backdrop-blur-xs">
+      <div className="divide-y divide-border/50 rounded-xl border border-border/70 bg-card px-3.5">
         {children}
       </div>
     </section>
@@ -186,7 +199,7 @@ function Segmented({
           type="button"
           onClick={() => onChange(option)}
           aria-pressed={value === option}
-          className={`flex-1 rounded-[6px] py-1 text-center font-medium text-[11.5px] transition-all duration-150 ${
+          className={`flex-1 rounded-[6px] py-1 text-center font-medium text-[11.5px] transition-colors duration-150 ${
             value === option
               ? "bg-card text-foreground shadow-xs"
               : "text-muted-foreground hover:text-foreground"
@@ -243,12 +256,14 @@ function ActionRow({
   );
 }
 
-function ShortcutRow({ label, keys }: { label: string; keys: string }) {
+function ShortcutRow({ label, keys, winKeys }: { label: string; keys: string; winKeys?: string }) {
+  const isMac = desktop()?.platform === "darwin" || (typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent));
+  const displayKeys = isMac ? keys : (winKeys || keys);
   return (
     <div className="flex items-center justify-between py-2.5">
       <div className="text-[12.5px] font-medium text-foreground">{label}</div>
       <kbd className="rounded border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-foreground/80">
-        {keys}
+        {displayKeys}
       </kbd>
     </div>
   );
@@ -299,11 +314,35 @@ function AppearancePane() {
   const [theme, setTheme] = useState(() => localStorage.getItem("bubble.theme") || "System");
   const [size, setSize] = useState(() => localStorage.getItem("bubble.bubbleSize") || "Medium");
 
-  const save = (key: string, value: string) => {
+  useEffect(() => {
+    desktop()?.getSettings().then((settings) => {
+      if (settings) {
+        if (settings.theme) setTheme(settings.theme);
+        if (settings.bubbleSize) setSize(settings.bubbleSize);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const saveTheme = (value: string) => {
+    if (value === theme) return;
+    withTransitionSuppression(() => {
+      setTheme(value);
+      try {
+        localStorage.setItem("bubble.theme", value);
+      } catch {}
+      desktop()?.setAppearance({ theme: value, bubbleSize: size });
+      window.dispatchEvent(new CustomEvent("bubble:appearance", { detail: { key: "bubble.theme", value } }));
+    });
+  };
+
+  const saveSize = (value: string) => {
+    if (value === size) return;
+    setSize(value);
     try {
-      localStorage.setItem(key, value);
+      localStorage.setItem("bubble.bubbleSize", value);
     } catch {}
-    window.dispatchEvent(new CustomEvent("bubble:appearance", { detail: { key, value } }));
+    desktop()?.setAppearance({ theme, bubbleSize: value });
+    window.dispatchEvent(new CustomEvent("bubble:appearance", { detail: { key: "bubble.bubbleSize", value } }));
   };
 
   return (
@@ -314,10 +353,7 @@ function AppearancePane() {
           <Segmented
             options={["System", "Light", "Dark"]}
             value={theme}
-            onChange={(value) => {
-              setTheme(value);
-              save("bubble.theme", value);
-            }}
+            onChange={saveTheme}
           />
         </div>
       </Group>
@@ -328,13 +364,9 @@ function AppearancePane() {
           <Segmented
             options={["Small", "Medium", "Large"]}
             value={size}
-            onChange={(value) => {
-              setSize(value);
-              save("bubble.bubbleSize", value);
-            }}
+            onChange={saveSize}
           />
         </div>
-
       </Group>
     </>
   );
@@ -348,9 +380,9 @@ function BehaviorPane() {
       </Group>
 
       <Group title="Global shortcuts">
-        <ShortcutRow label="Toggle bubble" keys="⌥ ⌘ B" />
-        <ShortcutRow label="Open Messenger" keys="⌥ ⌘ M" />
-        <ShortcutRow label="Open Zalo" keys="⌥ ⌘ Z" />
+        <ShortcutRow label="Toggle bubble" keys="⌥ ⌘ B" winKeys="Alt + Ctrl + B" />
+        <ShortcutRow label="Open Messenger" keys="⌥ ⌘ M" winKeys="Alt + Ctrl + M" />
+        <ShortcutRow label="Open Zalo" keys="⌥ ⌘ Z" winKeys="Alt + Ctrl + Z" />
       </Group>
     </>
   );
@@ -364,6 +396,17 @@ function PerformancePane() {
       return "Balanced";
     }
   });
+
+  useEffect(() => {
+    desktop()?.getSettings().then((settings) => {
+      if (settings?.performanceMode) {
+        setMode(settings.performanceMode);
+        try {
+          localStorage.setItem("bubble.performanceMode", settings.performanceMode);
+        } catch {}
+      }
+    }).catch(() => {});
+  }, []);
 
   const modes = [
     {
@@ -464,6 +507,7 @@ function AboutPane({
   checkForUpdates: () => Promise<void>;
   openUpdateDownload: () => Promise<void> | undefined;
 }) {
+  const [copied, setCopied] = useState(false);
   const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
   const electron = userAgent.match(/Electron\/([\d.]+)/)?.[1] || "Desktop shell";
   const chromium = userAgent.match(/Chrome\/([\d.]+)/)?.[1] || "Chromium";
@@ -509,6 +553,26 @@ function AboutPane({
         <div className="flex items-center justify-between py-2 text-[12px]">
           <span className="text-muted-foreground">Chromium</span>
           <span className="font-mono text-[11px] text-foreground">{chromium}</span>
+        </div>
+      </Group>
+
+      <Group title="Developer">
+        <div className="flex items-center justify-between gap-3 py-2">
+          <div>
+            <div className="text-[12px] font-medium text-foreground">Nguyen Minh Quoc</div>
+            <div className="font-mono text-[11px] text-muted-foreground">0866 007 219</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              desktop()?.copyDeveloperPhone();
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 1500);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
+          </button>
         </div>
       </Group>
     </>

@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("desktop", {
   isElectron: true,
+  platform: process.platform,
+  copyDeveloperPhone: () => ipcRenderer.send("developer:copyPhone"),
   getAppVersion: () => ipcRenderer.invoke("app:getVersion"),
   getUpdateInfo: () => ipcRenderer.invoke("update:getInfo"),
   checkForUpdates: () => ipcRenderer.invoke("update:check"),
@@ -10,6 +12,13 @@ contextBridge.exposeInMainWorld("desktop", {
     const handler = (_e, info) => cb(info);
     ipcRenderer.on("update:status", handler);
     return () => ipcRenderer.removeListener("update:status", handler);
+  },
+  getSettings: () => ipcRenderer.invoke("settings:get"),
+  setAppearance: (data) => ipcRenderer.send("settings:appearance", data),
+  onAppearance: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on("settings:appearance", handler);
+    return () => ipcRenderer.removeListener("settings:appearance", handler);
   },
   bubbleDragStart: () => ipcRenderer.send("bubble:dragStart"),
   bubbleDragEnd: () => ipcRenderer.send("bubble:dragEnd"),
@@ -45,5 +54,10 @@ contextBridge.exposeInMainWorld("desktop", {
     const handler = (_e, mode) => cb(mode);
     ipcRenderer.on("settings:performance", handler);
     return () => ipcRenderer.removeListener("settings:performance", handler);
+  },
+  onReloadProvider: (cb) => {
+    const handler = (_e, provider) => cb(provider);
+    ipcRenderer.on("provider:reload", handler);
+    return () => ipcRenderer.removeListener("provider:reload", handler);
   },
 });

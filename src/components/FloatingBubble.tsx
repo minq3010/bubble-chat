@@ -28,15 +28,18 @@ export default function FloatingBubble({
 
   return (
     <button
+      type="button"
       onClick={onClick}
       aria-label="Open chat panel"
       className={`group relative grid shrink-0 place-items-center rounded-full outline-none transition-[transform,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent ${
-        dragging ? "scale-110 cursor-grabbing" : "cursor-pointer hover:scale-[1.06] active:scale-95"
+        dragging ? "scale-105 cursor-grabbing" : "cursor-pointer hover:scale-[1.04] active:scale-95"
       } ${className}`}
       style={{
         width: px,
         height: px,
-        boxShadow: dragging ? "var(--shadow-e3)" : "var(--shadow-e2)",
+        boxShadow: dragging
+          ? "0 4px 14px rgba(0, 0, 0, 0.35)"
+          : "0 2px 8px rgba(0, 0, 0, 0.22)",
         opacity: snapped ? 0.9 : 1,
         transform: snapped ? `translateX(${edge === "right" ? 30 : -30}%)` : undefined,
         ...style,
@@ -49,8 +52,8 @@ export default function FloatingBubble({
           style={{ boxShadow: "0 0 0 2px var(--primary), 0 0 0 5px color-mix(in srgb, var(--primary) 22%, transparent)" }}
         />
       )}
-      <span className="grid place-items-center overflow-hidden rounded-full" style={{ width: px, height: px }}>
-        <AppIcon size={px} round />
+      <span className="grid place-items-center overflow-hidden rounded-full select-none" style={{ width: px, height: px }}>
+        <AppIcon size={px} round className="h-full w-full object-contain" />
       </span>
 
       {showBadge && (

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import FloatingBubble from "../components/FloatingBubble";
 import { desktop } from "./bridge";
 import { totalUnread, useUnreadCounts } from "../hooks/useUnreadCounts";
+import { withTransitionSuppression } from "../utils/theme";
 
 /**
  * Renderer for the transparent, always-on-top bubble window.
@@ -10,23 +11,61 @@ import { totalUnread, useUnreadCounts } from "../hooks/useUnreadCounts";
 export default function BubbleWindow() {
   const unreadCounts = useUnreadCounts();
   const unread = totalUnread(unreadCounts);
-  const [theme, setTheme] = useState(() => localStorage.getItem("bubble.theme") || "Dark");
+  const [theme, setTheme] = useState(() => localStorage.getItem("bubble.theme") || "System");
   const [size, setSize] = useState<"Small" | "Medium" | "Large">(() => {
     const value = localStorage.getItem("bubble.bubbleSize");
     return value === "Small" || value === "Large" ? value : "Medium";
   });
+  const [systemIsDark, setSystemIsDark] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)").matches : true
+  );
+  const [isDraggingVisual, setIsDraggingVisual] = useState(false);
 
   const lastClickRef = useRef(0);
-  const startPosRef = useRef<{ screenX: number; screenY: number } | null>(null);
-  const isDraggingRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.style.background = "transparent";
     document.body.style.background = "transparent";
 
+    desktop()?.getSettings().then((settings) => {
+      if (settings?.theme) setTheme((prev) => (prev === settings.theme ? prev : settings.theme));
+      if (
+        settings?.bubbleSize &&
+        (settings.bubbleSize === "Small" || settings.bubbleSize === "Medium" || settings.bubbleSize === "Large")
+      ) {
+        setSize(settings.bubbleSize);
+      }
+    }).catch(() => {});
+
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onMediaChange = (e: MediaQueryListEvent) => {
+      withTransitionSuppression(() => {
+        setSystemIsDark(e.matches);
+      });
+    };
+    media.addEventListener("change", onMediaChange);
+
+    const offIpc = desktop()?.onAppearance((data) => {
+      if (data.theme) {
+        withTransitionSuppression(() => {
+          setTheme((prev) => (prev === data.theme ? prev : (data.theme || prev)));
+        });
+      }
+      if (
+        data.bubbleSize &&
+        (data.bubbleSize === "Small" || data.bubbleSize === "Medium" || data.bubbleSize === "Large")
+      ) {
+        setSize(data.bubbleSize);
+      }
+    });
+
     const onAppearance = (event: Event) => {
       const value = (event as CustomEvent<{ key: string; value: string }>).detail;
-      if (value.key === "bubble.theme") setTheme(value.value);
+      if (value.key === "bubble.theme") {
+        withTransitionSuppression(() => {
+          setTheme((prev) => (prev === value.value ? prev : value.value));
+        });
+      }
       if (
         value.key === "bubble.bubbleSize" &&
         (value.value === "Small" || value.value === "Medium" || value.value === "Large")
@@ -35,74 +74,94 @@ export default function BubbleWindow() {
       }
     };
     window.addEventListener("bubble:appearance", onAppearance);
-    return () => window.removeEventListener("bubble:appearance", onAppearance);
+
+    return () => {
+      media.removeEventListener("change", onMediaChange);
+      offIpc?.();
+      window.removeEventListener("bubble:appearance", onAppearance);
+    };
   }, []);
+
+  const isDark = theme === "Dark" || (theme === "System" && systemIsDark);
+
+  useEffect(() => {
+    withTransitionSuppression(() => {
+      document.documentElement.classList.toggle("dark", isDark);
+    });
+  }, [isDark]);
 
   const triggerClick = () => {
     const now = Date.now();
-    if (now - lastClickRef.current < 150) return;
+    if (now - lastClickRef.current < 200) return;
     lastClickRef.current = now;
     desktop()?.bubbleClick();
   };
 
   function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
-    const target = event.currentTarget;
-    try {
-      target.setPointerCapture(event.pointerId);
-    } catch {}
+    event.preventDefault();
 
-    // Lưu tọa độ screenX, screenY tuyệt đối trên màn hình để không bị sai lệch khi cửa sổ di chuyển
-    startPosRef.current = { screenX: event.screenX, screenY: event.screenY };
-    isDraggingRef.current = false;
+    const startX = event.screenX;
+    const startY = event.screenY;
+    const startTime = Date.now();
+    let isDragging = false;
 
     const onPointerMove = (moveEvent: PointerEvent) => {
-      if (!startPosRef.current) return;
       const distance = Math.hypot(
-        moveEvent.screenX - startPosRef.current.screenX,
-        moveEvent.screenY - startPosRef.current.screenY
+        moveEvent.screenX - startX,
+        moveEvent.screenY - startY
       );
-      // Ngưỡng di chuyển tuyệt đối trên màn hình
-      if (distance > 10) {
-        if (!isDraggingRef.current) {
-          isDraggingRef.current = true;
+      if (distance > 6) {
+        if (!isDragging) {
+          isDragging = true;
+          setIsDraggingVisual(true);
           desktop()?.bubbleDragStart();
         }
       }
     };
 
-    const onPointerUp = (upEvent: PointerEvent) => {
+    const cleanup = () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
-      try {
-        target.releasePointerCapture(upEvent.pointerId);
-      } catch {}
+      window.removeEventListener("pointercancel", onPointerUp);
+      window.removeEventListener("mouseup", onPointerUp);
+    };
 
-      if (isDraggingRef.current) {
-        isDraggingRef.current = false;
+    const onPointerUp = () => {
+      cleanup();
+
+      if (isDragging) {
+        setIsDraggingVisual(false);
         desktop()?.bubbleDragEnd();
       } else {
-        triggerClick();
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 600) {
+          triggerClick();
+        }
       }
-      startPosRef.current = null;
     };
 
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    window.addEventListener("mouseup", onPointerUp);
   }
 
   return (
     <div
-      className={`${theme !== "Light" ? "dark" : ""} relative flex h-screen w-screen items-center justify-center bg-transparent select-none`}
+      className={`${isDark ? "dark" : ""} relative flex h-screen w-screen items-center justify-center bg-transparent select-none`}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
         desktop()?.showContextMenu();
       }}
     >
-      <div onPointerDown={onPointerDown} className="cursor-grab active:cursor-grabbing">
+      <div
+        onPointerDown={onPointerDown}
+        className={`cursor-grab select-none active:cursor-grabbing ${isDraggingVisual ? "cursor-grabbing" : ""}`}
+      >
         <FloatingBubble
-          state={unread > 0 ? "unread" : "idle"}
+          state={isDraggingVisual ? "dragging" : unread > 0 ? "unread" : "idle"}
           unread={unread}
           size={size}
         />

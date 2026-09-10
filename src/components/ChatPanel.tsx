@@ -208,12 +208,18 @@ export default function ChatPanel({
     const update = (mode: string) => setPerformanceMode(mode);
     const onLocalChange = (event: Event) => update((event as CustomEvent<string>).detail);
     const off = desktop()?.onPerformance(update);
+    const offReload = desktop()?.onReloadProvider?.((p) => {
+      if (p === provider || p === "all") {
+        reload();
+      }
+    });
     window.addEventListener("bubble:performance", onLocalChange);
     return () => {
       window.removeEventListener("bubble:performance", onLocalChange);
       off?.();
+      offReload?.();
     };
-  }, []);
+  }, [provider]);
 
   const openExternal = () => {
     const url = provider === "messenger" ? "https://www.messenger.com" : "https://chat.zalo.me";
@@ -224,8 +230,8 @@ export default function ChatPanel({
     setProvider(next);
     setState("ready");
   };
-  // Only the explicit instant-switching mode keeps both heavy provider webviews alive.
-  const keepProvidersMounted = performanceMode === "Instant Switching";
+  // Low Memory mode unloads inactive tab; Balanced and Instant Switching keep tabs ready.
+  const keepProvidersMounted = performanceMode !== "Low Memory";
 
   return (
     <div

@@ -1,15 +1,17 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, shell, nativeImage, session, globalShortcut, net } = require("electron");
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, shell, nativeImage, session, globalShortcut, net, nativeTheme, clipboard } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const { compareVersions, selectAsset } = require("./update-utils.cjs");
 
 const DEV_URL = process.env.VITE_DEV_URL || "http://localhost:8443";
 const isDev = !app.isPackaged;
+const APP_ICON_PATH = path.join(__dirname, isDev ? "../public/bubble-chat-icon.png" : "../dist/bubble-chat-icon.png");
 const RELEASE_API = "https://api.github.com/repos/minq3010/bubble-chat/releases/latest";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
 
-const BUBBLE = 76; // window size (bubble ~56 + shadow/badge room)
+const BUBBLE = 88; // window size (room for bubble + shadow/badge without clipping)
+const PANEL_MARGIN = 12; // transparent margin around panel to prevent shadow and corner clipping
 const PANEL_CONFIG = {
   defaultWidth: 365,
   minWidth: 340,
@@ -33,6 +35,7 @@ let showBubbleOnStartup = true;
 let rememberPosition = true;
 let snapToEdge = true;
 let panelShowTimestamp = 0;
+let lastPanelBlurHide = 0;
 let panelWasVisibleBeforeDrag = false;
 let updateCheck = null;
 let updateInfo = { status: "idle", currentVersion: app.getVersion() };
@@ -57,6 +60,10 @@ closeOnBlur = savedSettings.closeOnBlur !== false;
 showBubbleOnStartup = savedSettings.showBubbleOnStartup !== false;
 rememberPosition = savedSettings.rememberPosition !== false;
 snapToEdge = savedSettings.snapToEdge !== false;
+let alwaysOnTop = savedSettings.alwaysOnTop !== false;
+if (savedSettings.theme) {
+  nativeTheme.themeSource = savedSettings.theme.toLowerCase();
+}
 
 function keepBubbleOnScreen(x, y) {
   const display = screen.getAllDisplays().find(({ bounds }) =>
@@ -145,6 +152,7 @@ function createBubble() {
     y: workArea.y + Math.round(workArea.height * 0.4),
   };
   bubbleWin = new BrowserWindow({
+    icon: APP_ICON_PATH,
     width: BUBBLE,
     height: BUBBLE,
     x: start.x,
@@ -165,15 +173,10 @@ function createBubble() {
     },
   });
   bubbleWin.setIgnoreMouseEvents(false);
-  bubbleWin.setAlwaysOnTop(true, "screen-saver");
+  bubbleWin.setAlwaysOnTop(alwaysOnTop, "screen-saver");
   bubbleWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   loadRoute(bubbleWin, "bubble");
   bubbleWin.webContents.on("did-finish-load", () => bubbleWin?.webContents.send("notifications:unread", unreadCounts));
-  bubbleWin.on("blur", () => {
-    if (!isDragging) return;
-    isDragging = false;
-    stopDrag();
-  });
   bubbleWin.on("closed", () => (bubbleWin = null));
 }
 
@@ -181,16 +184,17 @@ function createPanel() {
   const { workArea } = screen.getPrimaryDisplay();
   const { width, height } = getPanelSize(workArea);
   panelWin = new BrowserWindow({
+    icon: APP_ICON_PATH,
     width,
     height,
     frame: false,
     transparent: true,
     resizable: true,
-    minWidth: PANEL_CONFIG.minWidth,
-    minHeight: PANEL_CONFIG.minHeight,
+    minWidth: PANEL_CONFIG.minWidth + PANEL_MARGIN * 2,
+    minHeight: PANEL_CONFIG.minHeight + PANEL_MARGIN * 2,
     show: false,
     hasShadow: false,
-    alwaysOnTop: true,
+    alwaysOnTop,
     skipTaskbar: true,
     fullscreenable: false,
     webPreferences: {
@@ -200,7 +204,7 @@ function createPanel() {
       webviewTag: true, // enables <webview> for Messenger/Zalo
     },
   });
-  panelWin.setAlwaysOnTop(true, "screen-saver");
+  panelWin.setAlwaysOnTop(alwaysOnTop, "screen-saver");
   loadRoute(panelWin, "panel");
   panelWin.webContents.on("did-finish-load", () => {
     panelWin?.webContents.send("notifications:unread", unreadCounts);
@@ -213,6 +217,7 @@ function createPanel() {
       if (!panelWin || panelWin.isDestroyed()) return;
       const isBubbleActive = BrowserWindow.getFocusedWindow() === bubbleWin || isCursorOverBubble();
       if (closeOnBlur && !isBubbleActive) {
+        lastPanelBlurHide = Date.now();
         panelWin.hide();
       }
     }, 50);
@@ -232,9 +237,9 @@ function isCursorOverBubble() {
 
 function getPanelSize(workArea) {
   const targetWidth = Math.min(PANEL_CONFIG.maxWidth, Math.max(PANEL_CONFIG.minWidth, Math.round(workArea.width * PANEL_CONFIG.widthRatio)));
-  const width = targetWidth || PANEL_CONFIG.defaultWidth;
+  const width = (targetWidth || PANEL_CONFIG.defaultWidth) + PANEL_MARGIN * 2;
   const targetHeight = Math.min(PANEL_CONFIG.maxHeight, Math.max(PANEL_CONFIG.minHeight, Math.round(workArea.height * PANEL_CONFIG.heightRatio)));
-  const height = targetHeight || PANEL_CONFIG.defaultHeight;
+  const height = (targetHeight || PANEL_CONFIG.defaultHeight) + PANEL_MARGIN * 2;
   return { width, height };
 }
 
@@ -246,15 +251,16 @@ function positionPanelNearBubble() {
   const wa = disp.workArea;
   const { width, height } = getPanelSize(wa);
   const spaceRight = wa.x + wa.width - (bx + BUBBLE);
-  const openRight = spaceRight >= width + 16;
-  let px = openRight ? bx + BUBBLE - 8 : bx - width + 8;
-  px = Math.min(Math.max(wa.x + 8, px), Math.max(wa.x + 8, wa.x + wa.width - width - 8));
+  const openRight = spaceRight >= width - PANEL_MARGIN * 2;
+  let px = openRight ? bx + BUBBLE - PANEL_MARGIN : bx - width + PANEL_MARGIN;
+  px = Math.min(Math.max(wa.x - PANEL_MARGIN, px), Math.max(wa.x - PANEL_MARGIN, wa.x + wa.width - width + PANEL_MARGIN));
   let py = by - 40;
-  py = Math.min(Math.max(wa.y + 8, py), Math.max(wa.y + 8, wa.y + wa.height - height - 8));
+  py = Math.min(Math.max(wa.y - PANEL_MARGIN, py), Math.max(wa.y - PANEL_MARGIN, wa.y + wa.height - height + PANEL_MARGIN));
   panelWin.setBounds({ x: Math.round(px), y: Math.round(py), width, height });
 }
 
 function togglePanel() {
+  if (Date.now() - lastPanelBlurHide < 350) return;
   if (!panelWin) createPanel();
   if (panelWin.isVisible()) {
     panelWin.hide();
@@ -274,7 +280,7 @@ function snapBubble() {
   const wa = disp.workArea;
   const center = bx + BUBBLE / 2;
   const toRight = center > wa.x + wa.width / 2;
-  const nx = toRight ? wa.x + wa.width - BUBBLE : wa.x;
+  const nx = toRight ? wa.x + wa.width - BUBBLE + 6 : wa.x - 6;
   const ny = Math.min(Math.max(wa.y, by), wa.y + wa.height - BUBBLE);
   bubbleWin.setPosition(Math.round(nx), Math.round(ny));
 }
@@ -299,8 +305,7 @@ function stopDrag() {
 }
 
 function buildTray() {
-  const iconPath = path.join(__dirname, isDev ? "../public/bubble-chat-icon.png" : "../dist/bubble-chat-icon.png");
-  const icon = nativeImage.createFromPath(iconPath).resize({ width: 32, height: 32 });
+  const icon = nativeImage.createFromPath(APP_ICON_PATH).resize({ width: 32, height: 32 });
   tray = new Tray(icon);
   tray.setToolTip("Bubble Chat — Messenger + Zalo");
   const menu = Menu.buildFromTemplate([
@@ -410,6 +415,7 @@ ipcMain.on("bubble:dragEnd", () => {
 });
 ipcMain.on("bubble:click", () => {
   stopDrag();
+  isDragging = false;
   togglePanel();
 });
 ipcMain.on("panel:collapse", () => panelWin?.hide());
@@ -421,10 +427,16 @@ ipcMain.on("bubble:hide", () => bubbleWin?.hide());
 ipcMain.on("bubble:contextMenu", showBubbleContextMenu);
 ipcMain.on("provider:open", (_e, which) => openProvider(which));
 ipcMain.on("app:quit", () => app.quit());
-ipcMain.on("settings:login", (_e, enabled) => app.setLoginItemSettings({ openAtLogin: Boolean(enabled) }));
+ipcMain.on("settings:login", (_e, enabled) => {
+  const openAtLogin = Boolean(enabled);
+  writeState({ startAtLogin: openAtLogin });
+  app.setLoginItemSettings({ openAtLogin });
+});
 ipcMain.on("settings:alwaysOnTop", (_e, enabled) => {
-  bubbleWin?.setAlwaysOnTop(Boolean(enabled), "screen-saver");
-  panelWin?.setAlwaysOnTop(Boolean(enabled), "screen-saver");
+  alwaysOnTop = Boolean(enabled);
+  writeState({ alwaysOnTop });
+  bubbleWin?.setAlwaysOnTop(alwaysOnTop, "screen-saver");
+  panelWin?.setAlwaysOnTop(alwaysOnTop, "screen-saver");
 });
 ipcMain.on("settings:closeOnBlur", (_e, enabled) => {
   closeOnBlur = Boolean(enabled);
@@ -445,6 +457,31 @@ ipcMain.on("settings:snapToEdge", (_e, enabled) => {
   writeState({ snapToEdge });
 });
 ipcMain.on("settings:performance", (_e, mode) => setPerformanceMode(mode));
+ipcMain.on("settings:appearance", (_e, data) => {
+  const patch = {};
+  if (data?.theme) {
+    patch.theme = data.theme;
+    nativeTheme.themeSource = data.theme.toLowerCase();
+  }
+  if (data?.bubbleSize) patch.bubbleSize = data.bubbleSize;
+  writeState(patch);
+  bubbleWin?.webContents.send("settings:appearance", data);
+  panelWin?.webContents.send("settings:appearance", data);
+});
+ipcMain.handle("settings:get", () => {
+  const state = readState();
+  return {
+    startAtLogin: state.startAtLogin ?? app.getLoginItemSettings().openAtLogin,
+    showBubbleOnStartup: state.showBubbleOnStartup !== false,
+    rememberPosition: state.rememberPosition !== false,
+    snapToEdge: state.snapToEdge !== false,
+    closeOnBlur: state.closeOnBlur !== false,
+    alwaysOnTop: state.alwaysOnTop !== false,
+    performanceMode: state.performanceMode || "Balanced",
+    theme: state.theme || "System",
+    bubbleSize: state.bubbleSize || "Medium",
+  };
+});
 ipcMain.on("notifications:unread", (_e, provider, count) => {
   if (!Object.hasOwn(unreadCounts, provider)) return;
   const next = Number.isFinite(Number(count)) ? Math.max(0, Math.min(999, Math.floor(Number(count)))) : 0;
@@ -453,12 +490,20 @@ ipcMain.on("notifications:unread", (_e, provider, count) => {
   panelWin?.webContents.send("notifications:unread", unreadCounts);
   bubbleWin?.webContents.send("notifications:unread", unreadCounts);
 });
-ipcMain.on("session:clear", (_e, provider) => {
+ipcMain.on("session:clear", async (_e, provider) => {
   if (!["messenger", "zalo", "cache"].includes(provider)) return;
-  const partitions = provider === "cache" ? ["persist:messenger", "persist:zalo"] : [`persist:${provider}`];
-  Promise.all(partitions.map((partition) => session.fromPartition(partition).clearStorageData())).catch(() => {});
+  if (provider === "cache") {
+    await Promise.all([
+      session.fromPartition("persist:messenger").clearCache(),
+      session.fromPartition("persist:zalo").clearCache(),
+    ]).catch(() => {});
+  } else {
+    await session.fromPartition(`persist:${provider}`).clearStorageData().catch(() => {});
+    panelWin?.webContents.send("provider:reload", provider);
+  }
 });
 ipcMain.on("session:openStorage", () => shell.openPath(app.getPath("userData")));
+ipcMain.on("developer:copyPhone", () => clipboard.writeText("0866007219"));
 ipcMain.handle("app:getVersion", () => app.getVersion());
 ipcMain.handle("update:getInfo", () => updateInfo);
 ipcMain.handle("update:check", () => checkAppUpdate());
@@ -483,6 +528,11 @@ app.whenReady().then(() => {
   createBubble();
   createPanel();
   buildTray();
+  if (app.dock) {
+    try {
+      app.dock.setIcon(APP_ICON_PATH);
+    } catch {}
+  }
   registerShortcuts();
   setTimeout(() => void checkAppUpdate(), 5000);
   screen.on("display-removed", restoreBubbleIfOffscreen);

@@ -38,5 +38,15 @@ export function ZaloIcon({ className, size = 20 }: IconProps) {
 }
 
 export function AppIcon({ className, size = 24, round = false }: IconProps & { round?: boolean }) {
-  return <img src={`${import.meta.env.BASE_URL}bubble-chat-icon.png`} width={size} height={size} className={`${round ? "rounded-full" : ""} ${className || ""}`} aria-hidden="true" />;
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}bubble-chat-icon.png`}
+      width={size}
+      height={size}
+      className={`select-none ${round ? "rounded-full" : ""} ${className || ""}`}
+      draggable={false}
+      alt="Bubble Chat"
+      aria-hidden="true"
+    />
+  );
 }
