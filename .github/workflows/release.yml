@@ -46,6 +46,13 @@ jobs:
       - name: Typecheck
         run: pnpm exec tsc --noEmit --noUnusedLocals --noUnusedParameters
 
+      - name: Verify release version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node -e "if (process.env.GITHUB_REF_NAME.slice(1) !== require('./package.json').version) process.exit(1)"
+
+      - name: Test update selection
+        run: node electron/update-utils.test.cjs
+
       - name: Package app
         run: ${{ matrix.command }}
         env:
@@ -58,7 +65,6 @@ jobs:
           path: |
             release/*.dmg
             release/*.exe
-            release/*.AppImage
             release/*.deb
           if-no-files-found: error
 

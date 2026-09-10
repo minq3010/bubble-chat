@@ -11,6 +11,7 @@ import { MessengerIcon, ZaloIcon } from "./BrandIcons";
 import { desktop } from "../desktop/bridge";
 import { useWebviewZoom } from "../hooks/useWebviewZoom";
 import { useUnreadCounts } from "../hooks/useUnreadCounts";
+import { useAppUpdate } from "../hooks/useAppUpdate";
 
 export type Provider = "messenger" | "zalo";
 type LoadState = "ready" | "failed";
@@ -196,6 +197,7 @@ export default function ChatPanel({
   const unread = useUnreadCounts();
   const [performanceMode, setPerformanceMode] = useState(() => localStorage.getItem("bubble.performanceMode") || "Balanced");
   const [reloadKey, setReloadKey] = useState(0);
+  const { updateInfo, openUpdateDownload } = useAppUpdate();
 
   useEffect(() => {
     setProvider(initialProvider);
@@ -305,6 +307,17 @@ export default function ChatPanel({
           )}
         </div>
       </div>
+
+      {updateInfo.status === "available" && (
+        <button
+          type="button"
+          onClick={() => void openUpdateDownload()}
+          className="flex items-center justify-between bg-primary/10 px-3 py-1.5 text-left text-[11px] font-medium text-primary hover:bg-primary/15"
+        >
+          <span>Update available: {updateInfo.latestVersion}</span>
+          <span className="underline">{updateInfo.downloadUrl ? "Download" : "View release"}</span>
+        </button>
+      )}
 
       {/* main embedded area */}
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">

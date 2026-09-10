@@ -2,6 +2,15 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("desktop", {
   isElectron: true,
+  getAppVersion: () => ipcRenderer.invoke("app:getVersion"),
+  getUpdateInfo: () => ipcRenderer.invoke("update:getInfo"),
+  checkForUpdates: () => ipcRenderer.invoke("update:check"),
+  openUpdateDownload: () => ipcRenderer.invoke("update:openDownload"),
+  onUpdateStatus: (cb) => {
+    const handler = (_e, info) => cb(info);
+    ipcRenderer.on("update:status", handler);
+    return () => ipcRenderer.removeListener("update:status", handler);
+  },
   bubbleDragStart: () => ipcRenderer.send("bubble:dragStart"),
   bubbleDragEnd: () => ipcRenderer.send("bubble:dragEnd"),
   bubbleClick: () => ipcRenderer.send("bubble:click"),

@@ -1,9 +1,11 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, shell, nativeImage, session, globalShortcut } = require("electron");
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, shell, nativeImage, session, globalShortcut, net } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const { compareVersions, selectAsset } = require("./update-utils.cjs");
 
 const DEV_URL = process.env.VITE_DEV_URL || "http://localhost:8443";
 const isDev = !app.isPackaged;
+const RELEASE_API = "https://api.github.com/repos/minq3010/bubble-chat/releases/latest";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
 
@@ -31,6 +33,9 @@ let showBubbleOnStartup = true;
 let rememberPosition = true;
 let snapToEdge = true;
 let panelShowTimestamp = 0;
+let panelWasVisibleBeforeDrag = false;
+let updateCheck = null;
+let updateInfo = { status: "idle", currentVersion: app.getVersion() };
 
 function readState() {
   try {
@@ -71,6 +76,64 @@ function loadRoute(win, hash) {
     win.loadURL(`${DEV_URL}/#${hash}`);
   } else {
     win.loadFile(path.join(__dirname, "../dist/index.html"), { hash });
+  }
+}
+
+function sendUpdateInfo(win) {
+  if (win && !win.isDestroyed()) win.webContents.send("update:status", updateInfo);
+}
+
+function setUpdateInfo(next) {
+  updateInfo = next;
+  sendUpdateInfo(panelWin);
+}
+
+function isTrustedReleaseUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "github.com" && url.pathname.startsWith("/minq3010/bubble-chat/releases/");
+  } catch {
+    return false;
+  }
+}
+
+async function checkAppUpdate() {
+  if (updateCheck) return updateCheck;
+  const currentVersion = app.getVersion();
+  setUpdateInfo({ status: "checking", currentVersion });
+  updateCheck = (async () => {
+    try {
+      const response = await net.fetch(RELEASE_API, {
+        headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (response.status === 404) return { status: "up-to-date", currentVersion };
+      if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+      const release = await response.json();
+      const latestVersion = typeof release.tag_name === "string" ? release.tag_name : "";
+      const comparison = compareVersions(latestVersion, currentVersion);
+      if (comparison === null) throw new Error("Invalid release version");
+      if (comparison <= 0) return { status: "up-to-date", currentVersion, latestVersion };
+      const releaseUrl = typeof release.html_url === "string" && isTrustedReleaseUrl(release.html_url) ? release.html_url : undefined;
+      const asset = selectAsset(release.assets, process.platform, process.arch);
+      return {
+        status: "available",
+        currentVersion,
+        latestVersion,
+        releaseNotes: typeof release.body === "string" ? release.body.slice(0, 2000) : undefined,
+        downloadUrl: isTrustedReleaseUrl(asset?.browser_download_url) ? asset.browser_download_url : undefined,
+        releaseUrl,
+      };
+    } catch {
+      return { status: "error", currentVersion, error: "Couldn't check for updates. Try again." };
+    }
+  })();
+  try {
+    const next = await updateCheck;
+    setUpdateInfo(next);
+    return next;
+  } finally {
+    updateCheck = null;
   }
 }
 
@@ -139,7 +202,10 @@ function createPanel() {
   });
   panelWin.setAlwaysOnTop(true, "screen-saver");
   loadRoute(panelWin, "panel");
-  panelWin.webContents.on("did-finish-load", () => panelWin?.webContents.send("notifications:unread", unreadCounts));
+  panelWin.webContents.on("did-finish-load", () => {
+    panelWin?.webContents.send("notifications:unread", unreadCounts);
+    sendUpdateInfo(panelWin);
+  });
   panelWin.on("closed", () => (panelWin = null));
   panelWin.on("blur", () => {
     if (Date.now() - panelShowTimestamp < 400) return;
@@ -233,15 +299,8 @@ function stopDrag() {
 }
 
 function buildTray() {
-  const traySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#3d96ff"/><stop offset="1" stop-color="#b566ff"/></linearGradient></defs>
-    <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#g)"/>
-    <path fill="#fff" d="M16 7c-5 0-9 3.6-9 8.1 0 2.5 1.24 4.72 3.2 6.2v3.1l2.94-1.6c.9.22 1.86.35 2.86.35 5 0 9-3.6 9-8.05S21 7 16 7Z"/>
-    <circle cx="12.5" cy="15" r="1.4" fill="#6c7cff"/><circle cx="16" cy="15" r="1.4" fill="#6c7cff"/><circle cx="19.5" cy="15" r="1.4" fill="#6c7cff"/>
-  </svg>`;
-  const icon = nativeImage.createFromDataURL(
-    `data:image/svg+xml;base64,${Buffer.from(traySvg).toString("base64")}`,
-  );
+  const iconPath = path.join(__dirname, isDev ? "../public/bubble-chat-icon.png" : "../dist/bubble-chat-icon.png");
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 32, height: 32 });
   tray = new Tray(icon);
   tray.setToolTip("Bubble Chat — Messenger + Zalo");
   const menu = Menu.buildFromTemplate([
@@ -307,7 +366,8 @@ ipcMain.on("bubble:dragStart", () => {
   if (!bubbleWin) return;
   stopDrag();
   isDragging = true;
-  if (panelWin && panelWin.isVisible()) {
+  panelWasVisibleBeforeDrag = Boolean(panelWin?.isVisible());
+  if (panelWasVisibleBeforeDrag) {
     panelWin.hide();
   }
   const cursor = screen.getCursorScreenPoint();
@@ -339,12 +399,14 @@ ipcMain.on("bubble:dragEnd", () => {
     if (rememberPosition) writeState({ bubblePosition: { x, y } });
   }
 
-  // Tự động xuất hiện lại popup chat phù hợp tại vị trí mới sau khi thả bóng chat
-  if (!panelWin) createPanel();
-  positionPanelNearBubble();
-  panelShowTimestamp = Date.now();
-  panelWin.show();
-  panelWin.focus();
+  if (panelWasVisibleBeforeDrag) {
+    if (!panelWin) createPanel();
+    positionPanelNearBubble();
+    panelShowTimestamp = Date.now();
+    panelWin.show();
+    panelWin.focus();
+  }
+  panelWasVisibleBeforeDrag = false;
 });
 ipcMain.on("bubble:click", () => {
   stopDrag();
@@ -397,6 +459,14 @@ ipcMain.on("session:clear", (_e, provider) => {
   Promise.all(partitions.map((partition) => session.fromPartition(partition).clearStorageData())).catch(() => {});
 });
 ipcMain.on("session:openStorage", () => shell.openPath(app.getPath("userData")));
+ipcMain.handle("app:getVersion", () => app.getVersion());
+ipcMain.handle("update:getInfo", () => updateInfo);
+ipcMain.handle("update:check", () => checkAppUpdate());
+ipcMain.handle("update:openDownload", async () => {
+  const url = updateInfo.downloadUrl || updateInfo.releaseUrl;
+  if (!isTrustedReleaseUrl(url)) throw new Error("No trusted update download is available");
+  await shell.openExternal(url);
+});
 
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
@@ -414,6 +484,7 @@ app.whenReady().then(() => {
   createPanel();
   buildTray();
   registerShortcuts();
+  setTimeout(() => void checkAppUpdate(), 5000);
   screen.on("display-removed", restoreBubbleIfOffscreen);
   screen.on("display-metrics-changed", () => {
     restoreBubbleIfOffscreen();

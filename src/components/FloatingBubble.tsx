@@ -49,11 +49,8 @@ export default function FloatingBubble({
           style={{ boxShadow: "0 0 0 2px var(--primary), 0 0 0 5px color-mix(in srgb, var(--primary) 22%, transparent)" }}
         />
       )}
-      <span
-        className="grid place-items-center rounded-full"
-        style={{ width: px * 0.78, height: px * 0.78 }}
-      >
-        <AppIcon size={px * 0.78} round />
+      <span className="grid place-items-center overflow-hidden rounded-full" style={{ width: px, height: px }}>
+        <AppIcon size={px} round />
       </span>
 
       {showBadge && (

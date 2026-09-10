@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { AppIcon } from "./BrandIcons";
 import { desktop } from "../desktop/bridge";
+import { useAppUpdate } from "../hooks/useAppUpdate";
 
 export type Section =
   | "general"
@@ -452,8 +453,17 @@ function PrivacyPane() {
   );
 }
 
-function AboutPane() {
-  const [checked, setChecked] = useState(false);
+function AboutPane({
+  version,
+  updateInfo,
+  checkForUpdates,
+  openUpdateDownload,
+}: {
+  version: string;
+  updateInfo: ReturnType<typeof useAppUpdate>["updateInfo"];
+  checkForUpdates: () => Promise<void>;
+  openUpdateDownload: () => Promise<void> | undefined;
+}) {
   const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
   const electron = userAgent.match(/Electron\/([\d.]+)/)?.[1] || "Desktop shell";
   const chromium = userAgent.match(/Chrome\/([\d.]+)/)?.[1] || "Chromium";
@@ -468,18 +478,29 @@ function AboutPane() {
           <div className="font-mono text-[10.5px] text-muted-foreground">Messenger + Zalo Desktop</div>
         <button
           type="button"
-          onClick={() => setChecked(true)}
+          onClick={() => void checkForUpdates()}
+          disabled={updateInfo.status === "checking"}
           className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 font-medium text-[11.5px] text-primary-foreground shadow-xs transition-opacity hover:opacity-90 active:scale-98"
         >
-          <RefreshCw size={11} className={checked ? "" : "animate-spin-once"} />
-          {checked ? "Up to date (v1.4.0)" : "Check updates"}
+          <RefreshCw size={11} className={updateInfo.status === "checking" ? "animate-spin" : ""} />
+          {updateInfo.status === "checking" ? "Checking…" : updateInfo.status === "up-to-date" ? `Up to date (v${version})` : "Check updates"}
         </button>
+        {updateInfo.status === "available" && (
+          <div className="mt-2 text-[11px] font-medium text-success">
+            <div>
+              Update available: {updateInfo.latestVersion}
+              <button type="button" onClick={() => void openUpdateDownload()} className="ml-2 underline">{updateInfo.downloadUrl ? "Download" : "View release"}</button>
+            </div>
+            {updateInfo.releaseNotes && <p className="mt-1 max-h-16 overflow-y-auto whitespace-pre-line font-normal text-muted-foreground">{updateInfo.releaseNotes}</p>}
+          </div>
+        )}
+        {updateInfo.status === "error" && <div className="mt-2 text-[11px] text-danger">{updateInfo.error}</div>}
       </div>
 
       <Group title="Environment">
         <div className="flex items-center justify-between py-2 text-[12px]">
           <span className="text-muted-foreground">App version</span>
-          <span className="font-mono text-[11px] text-foreground">1.4.0</span>
+          <span className="font-mono text-[11px] text-foreground">{version}</span>
         </div>
         <div className="flex items-center justify-between py-2 text-[12px]">
           <span className="text-muted-foreground">Electron</span>
@@ -498,6 +519,8 @@ function AboutPane() {
 
 export default function SettingsWindow({ onClose }: { onClose: () => void }) {
   const [section, setSection] = useState<Section | null>(null);
+  const { updateInfo, checkForUpdates, openUpdateDownload } = useAppUpdate();
+  const version = updateInfo.currentVersion || "…";
 
   const activeMeta = SECTIONS.find((s) => s.id === section);
 
@@ -514,7 +537,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
       case "privacy":
         return <PrivacyPane />;
       case "about":
-        return <AboutPane />;
+        return <AboutPane version={version} updateInfo={updateInfo} checkForUpdates={checkForUpdates} openUpdateDownload={openUpdateDownload} />;
       default:
         return null;
     }
@@ -576,7 +599,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-medium text-[13px] text-foreground group-hover:text-primary">
-                      {item.label}
+                      {item.label}{item.id === "about" && updateInfo.status === "available" && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-danger align-middle" />}
                     </div>
                     <div className="truncate text-[11px] text-muted-foreground">{item.desc}</div>
                   </div>
@@ -593,7 +616,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
       {/* Footer info in root */}
       {section === null && (
         <div className="border-t border-border/40 bg-card/30 px-3.5 py-2 text-center font-mono text-[10px] text-muted-foreground">
-          Bubble Chat v1.4.0 · Messenger & Zalo
+          Bubble Chat v{version} · Messenger & Zalo
         </div>
       )}
     </div>

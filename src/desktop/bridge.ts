@@ -1,5 +1,20 @@
+export type UpdateInfo = {
+  status: "idle" | "checking" | "available" | "up-to-date" | "error";
+  currentVersion: string;
+  latestVersion?: string;
+  releaseNotes?: string;
+  downloadUrl?: string;
+  releaseUrl?: string;
+  error?: string;
+};
+
 export type DesktopBridge = {
   isElectron: true;
+  getAppVersion: () => Promise<string>;
+  getUpdateInfo: () => Promise<UpdateInfo>;
+  checkForUpdates: () => Promise<UpdateInfo>;
+  openUpdateDownload: () => Promise<void>;
+  onUpdateStatus: (cb: (info: UpdateInfo) => void) => () => void;
   bubbleDragStart: () => void;
   bubbleDragEnd: () => void;
   bubbleClick: () => void;

@@ -1,7 +1,7 @@
 {
   "name": "bubble-chat",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Bubble Chat desktop app for Messenger and Zalo",
   "author": {
     "name": "Nguyen Minh Quoc",
@@ -13,6 +13,7 @@
     "dev": "pnpm electron:dev",
     "build": "vite build",
     "format": "oxfmt",
+    "test:update": "node electron/update-utils.test.cjs",
     "electron": "cross-env ELECTRON_RUN_AS_NODE= electron .",
     "electron:dev": "concurrently -k -n vite,electron \"vite --host 0.0.0.0 --port 8443\" \"wait-on tcp:8443 && cross-env ELECTRON_RUN_AS_NODE= VITE_DEV_URL=http://localhost:8443 electron .\"",
     "build:mac": "cross-env ELECTRON=1 vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never",
@@ -32,17 +33,17 @@
       "output": "release"
     },
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "target": [{ "target": "dmg", "arch": ["arm64"] }],
+      "artifactName": "Bubble-Chat-${version}-mac-${arch}.${ext}",
       "category": "public.app-category.social-networking"
     },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }]
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "Bubble-Chat-${version}-win-${arch}.${ext}"
     },
     "linux": {
-      "target": [
-        { "target": "AppImage", "arch": ["x64"] },
-        { "target": "deb", "arch": ["x64"] }
-      ],
+      "target": [{ "target": "deb", "arch": ["x64"] }],
+      "artifactName": "Bubble-Chat-${version}-linux-${arch}.${ext}",
       "category": "Network"
     }
   },

@@ -38,27 +38,5 @@ export function ZaloIcon({ className, size = 20 }: IconProps) {
 }
 
 export function AppIcon({ className, size = 24, round = false }: IconProps & { round?: boolean }) {
-  return (
-    <svg viewBox="0 0 32 32" width={size} height={size} className={className} aria-hidden="true">
-      <defs>
-        <linearGradient id="app-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="var(--messenger)" />
-          <stop offset="1" stopColor="var(--messenger-2)" />
-        </linearGradient>
-      </defs>
-      {round ? (
-        <circle cx="16" cy="16" r="15" fill="url(#app-grad)" />
-      ) : (
-        <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#app-grad)" />
-      )}
-      <path
-        fill="#fff"
-        d="M16 7c-5 0-9 3.6-9 8.1 0 2.5 1.24 4.72 3.2 6.2v3.1l2.94-1.6c.9.22 1.86.35 2.86.35 5 0 9-3.6 9-8.05S21 7 16 7Z"
-        opacity="0.95"
-      />
-      <circle cx="12.5" cy="15" r="1.4" fill="url(#app-grad)" />
-      <circle cx="16" cy="15" r="1.4" fill="url(#app-grad)" />
-      <circle cx="19.5" cy="15" r="1.4" fill="url(#app-grad)" />
-    </svg>
-  );
+  return <img src={`${import.meta.env.BASE_URL}bubble-chat-icon.png`} width={size} height={size} className={`${round ? "rounded-full" : ""} ${className || ""}`} aria-hidden="true" />;
 }
