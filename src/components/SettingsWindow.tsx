@@ -537,12 +537,20 @@ function AboutPane({
           {updateInfo.status === "checking" ? "Checking…" : updateInfo.status === "up-to-date" ? `Up to date (v${version})` : "Check updates"}
         </button>
         {updateInfo.status === "available" && (
-          <div className="mt-2 text-[11px] font-medium text-success">
-            <div>
-              Update available: {updateInfo.latestVersion}
-              <button type="button" onClick={() => void openUpdateDownload()} className="ml-2 underline">{updateInfo.downloadUrl ? "Download" : "View release"}</button>
-            </div>
-            {updateInfo.releaseNotes && <p className="mt-1 max-h-16 overflow-y-auto whitespace-pre-line font-normal text-muted-foreground">{updateInfo.releaseNotes}</p>}
+          <div className="mt-2.5 flex flex-col items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-[11.5px] font-medium text-emerald-500">
+            <div>New version available: <strong>{updateInfo.latestVersion}</strong></div>
+            <button
+              type="button"
+              onClick={() => void openUpdateDownload()}
+              className="cursor-pointer inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1 font-semibold text-white shadow-xs hover:bg-emerald-500 active:scale-95"
+            >
+              {updateInfo.downloadUrl ? "Download update" : "View release"}
+            </button>
+            {updateInfo.releaseNotes && (
+              <p className="mt-1 max-h-16 overflow-y-auto whitespace-pre-line text-left font-normal text-muted-foreground text-[10.5px]">
+                {updateInfo.releaseNotes}
+              </p>
+            )}
           </div>
         )}
         {updateInfo.status === "error" && <div className="mt-2 text-[11px] text-danger">{updateInfo.error}</div>}

@@ -1,9 +1,3 @@
-const ASSET_SUFFIX = {
-  "darwin:arm64": "-mac-arm64.dmg",
-  "win32:x64": "-win-x64.exe",
-  "linux:x64": "-linux-x64.deb",
-};
-
 function versionParts(version) {
   const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version);
   return match ? match.slice(1).map(Number) : null;
@@ -20,12 +14,57 @@ function compareVersions(left, right) {
 }
 
 function selectAsset(assets, platform, arch) {
-  const suffix = ASSET_SUFFIX[`${platform}:${arch}`];
-  if (!suffix || !Array.isArray(assets)) return undefined;
+  if (!Array.isArray(assets)) return undefined;
+
+  const isMatching = (name) => {
+    const lower = name.toLowerCase();
+    if (lower.endsWith(".blockmap") || lower.endsWith(".yml") || lower.endsWith(".yaml")) {
+      return false;
+    }
+
+    if (platform === "linux") {
+      if (lower.endsWith(".deb")) {
+        if (arch === "x64" || arch === "amd64") {
+          return lower.includes("amd64") || lower.includes("x64");
+        }
+        if (arch === "arm64") return lower.includes("arm64");
+        return true;
+      }
+      if (lower.endsWith(".appimage")) {
+        if (arch === "x64" || arch === "amd64") {
+          return !lower.includes("arm64") && !lower.includes("armv7");
+        }
+        return true;
+      }
+    }
+
+    if (platform === "win32") {
+      if (lower.endsWith(".exe")) {
+        if (arch === "x64") return lower.includes("x64") || lower.includes("setup") || !lower.includes("arm64");
+        if (arch === "arm64") return lower.includes("arm64");
+        return true;
+      }
+    }
+
+    if (platform === "darwin") {
+      if (lower.endsWith(".dmg")) {
+        if (arch === "arm64") return lower.includes("arm64");
+        if (arch === "x64") return lower.includes("x64") || !lower.includes("arm64");
+        return true;
+      }
+      if (lower.endsWith(".zip")) {
+        if (arch === "arm64") return lower.includes("arm64");
+        return true;
+      }
+    }
+
+    return false;
+  };
+
   return assets.find((asset) =>
     typeof asset?.name === "string" &&
     typeof asset?.browser_download_url === "string" &&
-    asset.name.toLowerCase().endsWith(suffix),
+    isMatching(asset.name)
   );
 }
 

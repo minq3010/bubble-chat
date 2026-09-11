@@ -328,10 +328,10 @@ export default function ChatPanel({
         <button
           type="button"
           onClick={() => void openUpdateDownload()}
-          className="flex items-center justify-between bg-primary/10 px-3 py-1.5 text-left text-[11px] font-medium text-primary hover:bg-primary/15"
+          className="flex items-center justify-between bg-emerald-500/15 px-3 py-1.5 text-left text-[11px] font-medium text-emerald-500 hover:bg-emerald-500/20"
         >
           <span>Update available: {updateInfo.latestVersion}</span>
-          <span className="underline">{updateInfo.downloadUrl ? "Download" : "View release"}</span>
+          <span className="font-semibold underline">{updateInfo.downloadUrl ? "Download" : "View release"}</span>
         </button>
       )}
 

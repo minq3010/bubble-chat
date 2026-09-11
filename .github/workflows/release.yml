@@ -80,9 +80,31 @@ jobs:
           pattern: bubble-*
           merge-multiple: true
 
-      - name: Create release and attach installers
-        uses: softprops/action-gh-release@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          files: release/*
-          generate_release_notes: true
+      - name: Verify release installers
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Target version: $VERSION"
+          ls -la release/
+          # Ensure only installers matching the current tag version are included
+          for file in release/*; do
+            if [ -f "$file" ] && [[ "$file" != *"$VERSION"* ]]; then
+              echo "Removing unmatched asset: $file"
+              rm -f "$file"
+            fi
+          done
+          echo "Final release assets:"
+          ls -la release/
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME exists, uploading installers with clobber..."
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+          else
+            echo "Creating release $GITHUB_REF_NAME..."
+            gh release create "$GITHUB_REF_NAME" release/* \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
