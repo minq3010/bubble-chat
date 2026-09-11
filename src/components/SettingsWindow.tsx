@@ -13,6 +13,7 @@ import {
   ChevronRight,
   X,
   RefreshCw,
+  RotateCcw,
   Copy,
 } from "lucide-react";
 import { AppIcon } from "./BrandIcons";
@@ -304,6 +305,12 @@ function GeneralPane() {
           title="Close panel when losing focus"
           settingKey="closeOnBlur"
           defaultOn
+        />
+        <ActionRow
+          icon={<RotateCcw size={14} />}
+          title="Reset panel size"
+          desc="Restore default panel dimensions."
+          onClick={() => desktop()?.resetPanelSize()}
         />
       </Group>
     </>

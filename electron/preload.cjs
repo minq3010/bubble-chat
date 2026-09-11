@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("desktop", {
   openProvider: (which) => ipcRenderer.send("provider:open", which),
   quit: () => ipcRenderer.send("app:quit"),
   collapsePanel: () => ipcRenderer.send("panel:collapse"),
+  resetPanelSize: () => ipcRenderer.send("panel:resetSize"),
   openExternal: (url) => ipcRenderer.send("open:external", url),
   setLoginItem: (enabled) => ipcRenderer.send("settings:login", enabled),
   setAlwaysOnTop: (enabled) => ipcRenderer.send("settings:alwaysOnTop", enabled),

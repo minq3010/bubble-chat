@@ -11,7 +11,7 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
 
 const BUBBLE = 88; // window size (room for bubble + shadow/badge without clipping)
-const PANEL_MARGIN = 12; // transparent margin around panel to prevent shadow and corner clipping
+const PANEL_MARGIN = 0; // zero outer margin, no blurry outer shadow halo
 const PANEL_CONFIG = {
   defaultWidth: 365,
   minWidth: 340,
@@ -61,6 +61,7 @@ showBubbleOnStartup = savedSettings.showBubbleOnStartup !== false;
 rememberPosition = savedSettings.rememberPosition !== false;
 snapToEdge = savedSettings.snapToEdge !== false;
 let alwaysOnTop = savedSettings.alwaysOnTop !== false;
+let customPanelSize = savedSettings.panelSize || null;
 if (savedSettings.theme) {
   nativeTheme.themeSource = savedSettings.theme.toLowerCase();
 }
@@ -190,8 +191,8 @@ function createPanel() {
     frame: false,
     transparent: true,
     resizable: true,
-    minWidth: PANEL_CONFIG.minWidth + PANEL_MARGIN * 2,
-    minHeight: PANEL_CONFIG.minHeight + PANEL_MARGIN * 2,
+    minWidth: PANEL_CONFIG.minWidth,
+    minHeight: PANEL_CONFIG.minHeight,
     show: false,
     hasShadow: false,
     alwaysOnTop,
@@ -211,6 +212,16 @@ function createPanel() {
     sendUpdateInfo(panelWin);
   });
   panelWin.on("closed", () => (panelWin = null));
+  let panelResizeTimer = null;
+  panelWin.on("resize", () => {
+    if (panelResizeTimer) clearTimeout(panelResizeTimer);
+    panelResizeTimer = setTimeout(() => {
+      if (!panelWin || panelWin.isDestroyed()) return;
+      const [width, height] = panelWin.getSize();
+      customPanelSize = { width, height };
+      writeState({ panelSize: customPanelSize });
+    }, 250);
+  });
   panelWin.on("blur", () => {
     if (Date.now() - panelShowTimestamp < 400) return;
     setTimeout(() => {
@@ -236,10 +247,15 @@ function isCursorOverBubble() {
 }
 
 function getPanelSize(workArea) {
+  if (customPanelSize && typeof customPanelSize.width === "number" && typeof customPanelSize.height === "number") {
+    const width = Math.min(Math.max(PANEL_CONFIG.minWidth, Math.round(customPanelSize.width)), workArea.width);
+    const height = Math.min(Math.max(PANEL_CONFIG.minHeight, Math.round(customPanelSize.height)), workArea.height);
+    return { width, height };
+  }
   const targetWidth = Math.min(PANEL_CONFIG.maxWidth, Math.max(PANEL_CONFIG.minWidth, Math.round(workArea.width * PANEL_CONFIG.widthRatio)));
-  const width = (targetWidth || PANEL_CONFIG.defaultWidth) + PANEL_MARGIN * 2;
+  const width = targetWidth || PANEL_CONFIG.defaultWidth;
   const targetHeight = Math.min(PANEL_CONFIG.maxHeight, Math.max(PANEL_CONFIG.minHeight, Math.round(workArea.height * PANEL_CONFIG.heightRatio)));
-  const height = (targetHeight || PANEL_CONFIG.defaultHeight) + PANEL_MARGIN * 2;
+  const height = targetHeight || PANEL_CONFIG.defaultHeight;
   return { width, height };
 }
 
@@ -251,11 +267,11 @@ function positionPanelNearBubble() {
   const wa = disp.workArea;
   const { width, height } = getPanelSize(wa);
   const spaceRight = wa.x + wa.width - (bx + BUBBLE);
-  const openRight = spaceRight >= width - PANEL_MARGIN * 2;
-  let px = openRight ? bx + BUBBLE - PANEL_MARGIN : bx - width + PANEL_MARGIN;
-  px = Math.min(Math.max(wa.x - PANEL_MARGIN, px), Math.max(wa.x - PANEL_MARGIN, wa.x + wa.width - width + PANEL_MARGIN));
-  let py = by - 40;
-  py = Math.min(Math.max(wa.y - PANEL_MARGIN, py), Math.max(wa.y - PANEL_MARGIN, wa.y + wa.height - height + PANEL_MARGIN));
+  const openRight = spaceRight >= width + 8;
+  let px = openRight ? bx + BUBBLE + 6 : bx - width - 6;
+  px = Math.min(Math.max(wa.x, px), Math.max(wa.x, wa.x + wa.width - width));
+  let py = by - 30;
+  py = Math.min(Math.max(wa.y, py), Math.max(wa.y, wa.y + wa.height - height));
   panelWin.setBounds({ x: Math.round(px), y: Math.round(py), width, height });
 }
 
@@ -419,6 +435,13 @@ ipcMain.on("bubble:click", () => {
   togglePanel();
 });
 ipcMain.on("panel:collapse", () => panelWin?.hide());
+ipcMain.on("panel:resetSize", () => {
+  customPanelSize = null;
+  writeState({ panelSize: null });
+  if (panelWin && !panelWin.isDestroyed()) {
+    positionPanelNearBubble();
+  }
+});
 ipcMain.on("open:external", (_e, url) => {
   if (url === "https://www.messenger.com" || url === "https://chat.zalo.me") shell.openExternal(url);
 });
@@ -480,6 +503,7 @@ ipcMain.handle("settings:get", () => {
     performanceMode: state.performanceMode || "Balanced",
     theme: state.theme || "System",
     bubbleSize: state.bubbleSize || "Medium",
+    panelSize: state.panelSize || null,
   };
 });
 ipcMain.on("notifications:unread", (_e, provider, count) => {

@@ -34,6 +34,7 @@ export type DesktopBridge = {
   openProvider: (which: "messenger" | "zalo" | "settings") => void;
   quit: () => void;
   collapsePanel: () => void;
+  resetPanelSize: () => void;
   openExternal: (url: string) => void;
   setLoginItem: (enabled: boolean) => void;
   setAlwaysOnTop: (enabled: boolean) => void;

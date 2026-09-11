@@ -74,8 +74,8 @@ export default function PanelWindow() {
   }, [isDark]);
 
   return (
-    <div className={`${isDark ? "dark" : ""} h-screen w-screen p-[12px] bg-transparent select-none`}>
-      <div className="h-full w-full overflow-hidden rounded-[16px] border border-border/80 bg-panel shadow-e3">
+    <div className={`${isDark ? "dark" : ""} h-screen w-screen bg-transparent select-none`}>
+      <div className="h-full w-full overflow-hidden rounded-[16px] border border-border/80 bg-panel">
         {view === "settings" ? (
           <SettingsWindow onClose={() => setView("chat")} />
         ) : (

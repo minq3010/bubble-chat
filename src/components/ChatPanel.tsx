@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, createElement } from "react";
 import {
   RotateCw,
+  RotateCcw,
   ExternalLink,
   Minus,
   MoreHorizontal,
@@ -298,6 +299,15 @@ export default function ChatPanel({
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] hover:bg-muted"
               >
                 <Settings2 size={13} /> Open settings
+              </button>
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  desktop()?.resetPanelSize();
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] hover:bg-muted"
+              >
+                <RotateCcw size={13} /> Reset panel size
               </button>
               <div className="my-1 h-px bg-border" />
               <button
