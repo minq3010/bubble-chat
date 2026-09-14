@@ -14,11 +14,11 @@ const BUBBLE = 88; // window size (room for bubble + shadow/badge without clippi
 const PANEL_MARGIN = 0; // zero outer margin, no blurry outer shadow halo
 const PANEL_CONFIG = {
   defaultWidth: 365,
-  minWidth: 340,
+  minWidth: 240,
   maxWidth: 390,
   widthRatio: 0.25,
   defaultHeight: 510,
-  minHeight: 460,
+  minHeight: 300,
   maxHeight: 550,
   heightRatio: 0.57,
 };

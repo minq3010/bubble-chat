@@ -34,25 +34,46 @@ export function useWebviewZoom(): UseWebviewZoomResult {
     }, 1200);
   }, []);
 
+  const getEffectiveZoom = useCallback((baseZoom: number) => {
+    if (typeof window === "undefined") return baseZoom;
+    const width = window.innerWidth || 365;
+    // Messenger/Zalo web require at least ~430px effective width to prevent responsive layout wrapping
+    const minEffectiveWidth = 430;
+    const baseEffectiveWidth = width / baseZoom;
+    if (baseEffectiveWidth < minEffectiveWidth) {
+      const targetZoom = width / minEffectiveWidth;
+      return clampZoomFactor(Math.max(ZOOM_CONFIG.minZoom, targetZoom));
+    }
+    return baseZoom;
+  }, []);
+
   const triggerGuestResize = useCallback(() => {
     const view = webviewRef.current as {
       executeJavaScript?: (code: string) => Promise<unknown>;
       insertCSS?: (code: string) => Promise<unknown>;
+      setZoomFactor?: (f: number) => void;
     } | null;
-    if (view && typeof view.executeJavaScript === "function") {
-      try {
-        void view
-          .executeJavaScript(
-            `
-            window.dispatchEvent(new Event('resize'));
-            window.dispatchEvent(new UIEvent('resize'));
-            setTimeout(() => window.dispatchEvent(new Event('resize')), 150);
-            setTimeout(() => window.dispatchEvent(new Event('resize')), 450);
-          `,
-          )
-          .catch(() => {});
-      } catch {
-        // The guest page can still be attaching when zoom is applied.
+    if (view) {
+      if (typeof view.setZoomFactor === "function") {
+        try {
+          view.setZoomFactor(getEffectiveZoom(zoomFactorRef.current));
+        } catch {}
+      }
+      if (typeof view.executeJavaScript === "function") {
+        try {
+          void view
+            .executeJavaScript(
+              `
+              window.dispatchEvent(new Event('resize'));
+              window.dispatchEvent(new UIEvent('resize'));
+              setTimeout(() => window.dispatchEvent(new Event('resize')), 150);
+              setTimeout(() => window.dispatchEvent(new Event('resize')), 450);
+            `,
+            )
+            .catch(() => {});
+        } catch {
+          // The guest page can still be attaching when zoom is applied.
+        }
       }
       if (typeof view.insertCSS === "function") {
         try {
@@ -61,7 +82,7 @@ export function useWebviewZoom(): UseWebviewZoomResult {
               `
               html, body {
                 height: 100% !important;
-                overflow-x: hidden !important;
+                overflow: hidden !important;
               }
             `,
             )
@@ -69,7 +90,7 @@ export function useWebviewZoom(): UseWebviewZoomResult {
         } catch {}
       }
     }
-  }, []);
+  }, [getEffectiveZoom]);
 
   const applyZoom = useCallback(
     (nextZoom: number) => {
@@ -80,14 +101,14 @@ export function useWebviewZoom(): UseWebviewZoomResult {
       const view = webviewRef.current as { setZoomFactor?: (f: number) => void } | null;
       if (view && typeof view.setZoomFactor === "function") {
         try {
-          view.setZoomFactor(nextZoom);
+          view.setZoomFactor(getEffectiveZoom(nextZoom));
           triggerGuestResize();
         } catch {
           // Ignore call failures if webview is not ready
         }
       }
     },
-    [showZoomIndicator, triggerGuestResize],
+    [showZoomIndicator, triggerGuestResize, getEffectiveZoom],
   );
 
   const applyDirection = useCallback(
@@ -105,16 +126,29 @@ export function useWebviewZoom(): UseWebviewZoomResult {
         return;
       }
 
-      const view = element as { setZoomFactor?: (f: number) => void } & HTMLElement;
+      const view = element as {
+        setZoomFactor?: (f: number) => void;
+        insertCSS?: (code: string) => Promise<unknown>;
+      } & HTMLElement;
 
       const enforceZoom = () => {
         if (typeof view.setZoomFactor === "function") {
           try {
-            view.setZoomFactor(zoomFactorRef.current);
+            view.setZoomFactor(getEffectiveZoom(zoomFactorRef.current));
             triggerGuestResize();
           } catch {
             // Webview might still be loading contents
           }
+        }
+        if (typeof view.insertCSS === "function") {
+          try {
+            void view.insertCSS(`
+              html, body {
+                height: 100% !important;
+                overflow: hidden !important;
+              }
+            `).catch(() => {});
+          } catch {}
         }
       };
 

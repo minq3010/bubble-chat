@@ -64,16 +64,16 @@ function ProviderTab({
     <button
       onClick={onClick}
       aria-pressed={active}
-      className={`group relative flex items-center gap-1.5 rounded-[7px] px-2.5 py-0.5 text-[12px] font-medium transition-all duration-150 outline-none focus-visible:ring-1 focus-visible:ring-ring/60 ${
+      className={`group relative flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2.5 py-0.5 text-[12px] font-medium transition-all duration-150 outline-none focus-visible:ring-1 focus-visible:ring-ring/60 ${
         active
           ? "bg-card text-card-foreground shadow-sm"
           : "text-muted-foreground hover:bg-card/40 hover:text-foreground"
       }`}
     >
-      <Icon size={14} />
+      <Icon size={14} className="shrink-0" />
       <span>{name}</span>
       {unread > 0 && (
-        <span className="ml-0.5 grid h-[15px] min-w-[15px] place-items-center rounded-full bg-danger px-1 font-mono text-[9px] font-semibold text-white">
+        <span className="ml-0.5 grid h-[15px] min-w-[15px] shrink-0 place-items-center rounded-full bg-danger px-1 font-mono text-[9px] font-semibold text-white">
           {unread}
         </span>
       )}
@@ -246,7 +246,7 @@ export default function ChatPanel({
           setMenuOpen((prev) => !prev);
         }}
       >
-        <div className="flex items-center gap-1 rounded-[8px] bg-muted/60 p-0.5">
+        <div className="flex shrink-0 items-center gap-1 rounded-[8px] bg-muted/60 p-0.5">
           <ProviderTab
             provider="messenger"
             active={provider === "messenger"}
