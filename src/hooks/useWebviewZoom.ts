@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   calculateNextZoom,
+  clampZoomFactor,
   getStoredZoomFactor,
   saveStoredZoomFactor,
   ZoomDirection,
