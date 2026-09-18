@@ -1,7 +1,7 @@
 {
   "name": "bubble-chat",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Bubble Chat desktop app for Messenger and Zalo",
   "author": {
     "name": "Nguyen Minh Quoc",

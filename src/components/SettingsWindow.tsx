@@ -20,7 +20,7 @@ import { AppIcon } from "./BrandIcons"
 import { desktop } from "../desktop/bridge"
 import { useAppUpdate } from "../hooks/useAppUpdate"
 import { withTransitionSuppression } from "../utils/theme"
-import { useTranslation, type TranslationKey } from "../utils/i18n"
+import { useTranslation } from "../utils/i18n"
 
 export type Section = "general" | "appearance" | "behavior" | "performance" | "privacy" | "about"
 
