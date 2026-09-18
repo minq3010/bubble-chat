@@ -605,18 +605,51 @@ function PrivacyPane() {
   )
 }
 
-function AboutPane({
-  version,
-  updateInfo,
-  checkForUpdates,
-  openUpdateDownload,
-}: {
+function formatRemainingDetailed(seconds: number, lang: "vi" | "en"): string {
+  const safeSec = Math.max(0, Math.floor(seconds))
+  const h = Math.floor(safeSec / 3600)
+  const m = Math.floor((safeSec % 3600) / 60)
+  const s = safeSec % 60
+
+  if (lang === "vi") {
+    if (h > 0) return `${h} giờ ${m} phút`
+    if (m > 0) return `${m} phút ${s} giây`
+    return `${s} giây`
+  }
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
+
+function formatRemainingShort(seconds: number, lang: "vi" | "en"): string {
+  const safeSec = Math.max(0, Math.floor(seconds))
+  const h = Math.floor(safeSec / 3600)
+  const m = Math.floor((safeSec % 3600) / 60)
+
+  if (lang === "vi") {
+    if (h > 0) return `${h}g ${m}p`
+    return `${m}p`
+  }
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
+
+type AboutPaneProps = {
   version: string
+  remainingSeconds?: number
   updateInfo: ReturnType<typeof useAppUpdate>["updateInfo"]
   checkForUpdates: () => Promise<void>
   openUpdateDownload: () => Promise<void> | undefined
-}) {
-  const { t } = useTranslation()
+}
+
+function AboutPane({
+  version,
+  remainingSeconds,
+  updateInfo,
+  checkForUpdates,
+  openUpdateDownload,
+}: AboutPaneProps) {
+  const { t, lang } = useTranslation()
   const [copied, setCopied] = useState(false)
   const electron = "44.2.0"
   const chromium = "152.0.7977.76"
@@ -680,6 +713,19 @@ function AboutPane({
             {version}
           </span>
         </div>
+        {typeof remainingSeconds === "number" && (
+          <div className="flex items-center justify-between py-2 text-[12px]">
+            <span
+              className="text-muted-foreground"
+              title={t("sessionRemainingDesc")}
+            >
+              {t("sessionRemaining")}
+            </span>
+            <span className="font-mono text-[11px] text-foreground/80">
+              {formatRemainingDetailed(remainingSeconds, lang)}
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-between py-2 text-[12px]">
           <span className="text-muted-foreground">Electron</span>
           <span className="font-mono text-[11px] text-foreground">
@@ -727,8 +773,56 @@ function AboutPane({
 export default function SettingsWindow({ onClose }: { onClose: () => void }) {
   const { t, lang, setLanguage } = useTranslation()
   const [section, setSection] = useState<Section | null>(null)
+  const [remainingSeconds, setRemainingSeconds] = useState<number | undefined>(
+    () => (desktop()?.isElectron ? 14400 : undefined),
+  )
   const { updateInfo, checkForUpdates, openUpdateDownload } = useAppUpdate()
   const version = updateInfo.currentVersion || "…"
+
+  useEffect(() => {
+    let active = true
+    const fetchStatus = () => {
+      desktop()
+        ?.getLockStatus?.()
+        .then((res) => {
+          if (active) {
+            if (typeof res?.remainingSeconds === "number") {
+              setRemainingSeconds(res.remainingSeconds)
+            } else if (res && !res.isLocked) {
+              setRemainingSeconds((prev) =>
+                typeof prev === "number" ? prev : 14400,
+              )
+            }
+          }
+        })
+        .catch(() => {})
+    }
+    fetchStatus()
+    const timer = setInterval(fetchStatus, 10000)
+    const tick = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (typeof prev === "number" && prev > 0) {
+          return prev - 1
+        }
+        return prev
+      })
+    }, 1000)
+    const offLock = desktop()?.onLockState?.((status) => {
+      if (active) {
+        if (typeof status?.remainingSeconds === "number") {
+          setRemainingSeconds(status.remainingSeconds)
+        } else if (status?.isLocked) {
+          setRemainingSeconds(0)
+        }
+      }
+    })
+    return () => {
+      active = false
+      clearInterval(timer)
+      clearInterval(tick)
+      offLock?.()
+    }
+  }, [])
 
   const sections: Array<{
     id: Section
@@ -799,6 +893,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
         return (
           <AboutPane
             version={version}
+            remainingSeconds={remainingSeconds}
             updateInfo={updateInfo}
             checkForUpdates={checkForUpdates}
             openUpdateDownload={openUpdateDownload}
@@ -905,8 +1000,16 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
 
       {/* Footer info in root */}
       {section === null && (
-        <div className="border-t border-border/40 bg-card/30 px-3.5 py-2 text-center font-mono text-[10px] text-muted-foreground">
-          Bubble Chat v{version} · Messenger & Zalo
+        <div className="flex items-center justify-between border-t border-border/40 bg-card/30 px-3.5 py-2 font-mono text-[10px] text-muted-foreground">
+          <span>Bubble Chat v{version}</span>
+          {typeof remainingSeconds === "number" && (
+            <span
+              className="opacity-75 transition-opacity hover:opacity-100 cursor-default"
+              title={`${t("sessionRemaining")}: ${formatRemainingDetailed(remainingSeconds, lang)}`}
+            >
+              {formatRemainingShort(remainingSeconds, lang)}
+            </span>
+          )}
         </div>
       )}
     </div>

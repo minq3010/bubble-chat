@@ -68,4 +68,11 @@ contextBridge.exposeInMainWorld("desktop", {
   },
   getMemoryUsage: () => ipcRenderer.invoke("system:getMemory"),
   trimMemory: () => ipcRenderer.invoke("system:trimMemory"),
+  getLockStatus: () => ipcRenderer.invoke("totp:getStatus"),
+  verifyTotp: (code) => ipcRenderer.invoke("totp:verify", code),
+  onLockState: (cb) => {
+    const handler = (_e, status) => cb(status)
+    ipcRenderer.on("lock:status", handler)
+    return () => ipcRenderer.removeListener("lock:status", handler)
+  },
 })

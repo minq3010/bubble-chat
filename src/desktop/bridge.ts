@@ -29,6 +29,20 @@ export type MemoryUsageResult = {
   metrics?: MemoryMetricItem[]
 }
 
+export type TotpVerifyResult = {
+  success: boolean
+  error?: string
+  lockoutRemainingSeconds?: number
+  failedAttempts?: number
+}
+
+export type LockStatus = {
+  isLocked: boolean
+  remainingSeconds?: number
+  lockoutRemainingSeconds?: number
+  failedAttempts?: number
+}
+
 export type DesktopBridge = {
   isElectron: true
   platform?: string
@@ -71,6 +85,9 @@ export type DesktopBridge = {
   onReloadProvider?: (cb: (provider: string) => void) => () => void
   getMemoryUsage?: () => Promise<MemoryUsageResult>
   trimMemory?: () => Promise<boolean>
+  getLockStatus?: () => Promise<LockStatus>
+  verifyTotp?: (code: string) => Promise<TotpVerifyResult>
+  onLockState?: (cb: (status: LockStatus) => void) => () => void
 }
 
 declare global {

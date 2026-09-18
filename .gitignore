@@ -3,6 +3,11 @@ dist/
 build/
 .cache/
 .env*
+!.env.example
+electron/totp-secret.json
+admin-totp-qr.png
+*qr*.png
+scripts/
 .vite/
 vite.config.*.timestamp-*
 *.tsbuildinfo

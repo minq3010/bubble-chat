@@ -53,10 +53,16 @@ jobs:
       - name: Test update selection
         run: node electron/update-utils.test.cjs
 
+      - name: Inject TOTP secret
+        env:
+          BUBBLE_TOTP_SECRET: ${{ secrets.BUBBLE_TOTP_SECRET }}
+        run: node -e "if (process.env.BUBBLE_TOTP_SECRET) require('fs').writeFileSync('electron/totp-secret.json', JSON.stringify({ secret: process.env.BUBBLE_TOTP_SECRET }))"
+
       - name: Package app
         run: ${{ matrix.command }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          BUBBLE_TOTP_SECRET: ${{ secrets.BUBBLE_TOTP_SECRET }}
 
       - name: Upload installers
         uses: actions/upload-artifact@v4

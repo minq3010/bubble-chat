@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import ChatPanel from "../components/ChatPanel"
 import type { Provider } from "../components/ChatPanel"
 import SettingsWindow from "../components/SettingsWindow"
+import LockScreen from "../components/LockScreen"
 import { desktop } from "./bridge"
 import { withTransitionSuppression } from "../utils/theme"
 
@@ -9,6 +10,7 @@ import { withTransitionSuppression } from "../utils/theme"
 export default function PanelWindow() {
   const [provider, setProvider] = useState<Provider>("messenger")
   const [view, setView] = useState<"chat" | "settings">("chat")
+  const [isLocked, setIsLocked] = useState(false)
   const [theme, setTheme] = useState(
     () => localStorage.getItem("bubble.theme") || "System",
   )
@@ -72,11 +74,27 @@ export default function PanelWindow() {
         setView("chat")
       }
     })
+    const offLock = desktop()?.onLockState?.((status) => {
+      if (typeof status?.isLocked === "boolean") {
+        setIsLocked(status.isLocked)
+      }
+    })
+
+    void desktop()
+      ?.getLockStatus?.()
+      .then((status) => {
+        if (typeof status?.isLocked === "boolean") {
+          setIsLocked(status.isLocked)
+        }
+      })
+      .catch(() => {})
+
     return () => {
       media.removeEventListener("change", onMediaChange)
       offIpc?.()
       window.removeEventListener("bubble:appearance", onAppearance)
       offNav?.()
+      offLock?.()
     }
   }, [])
 
@@ -95,7 +113,9 @@ export default function PanelWindow() {
       } h-screen w-screen bg-transparent select-none`}
     >
       <div className="h-full w-full overflow-hidden rounded-[16px] border border-border/80 bg-panel">
-        {view === "settings" ? (
+        {isLocked ? (
+          <LockScreen onUnlocked={() => setIsLocked(false)} />
+        ) : view === "settings" ? (
           <SettingsWindow onClose={() => setView("chat")} />
         ) : (
           <ChatPanel initialProvider={provider} />

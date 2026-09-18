@@ -15,6 +15,11 @@ const {
 } = require("electron")
 const path = require("node:path")
 const fs = require("node:fs")
+const crypto = require("node:crypto")
+const os = require("node:os")
+try {
+  require("dotenv").config({ path: path.join(__dirname, "../.env") })
+} catch {}
 const { compareVersions, selectAsset } = require("./update-utils.cjs")
 
 const DEV_URL = process.env.VITE_DEV_URL || "http://localhost:8443"
@@ -67,19 +72,307 @@ let panelWasVisibleBeforeDrag = false
 let updateCheck = null
 let updateInfo = { status: "idle", currentVersion: app.getVersion() }
 
+// Secret resolution for TOTP and Shadow Store HMAC signing
+let embeddedSecret = ""
+try {
+  embeddedSecret = require("./totp-secret.json").secret
+} catch {}
+
+function getMachineFingerprint() {
+  try {
+    return crypto
+      .createHash("sha256")
+      .update(
+        `${os.hostname()}-${os.platform()}-${os.arch()}-${os.userInfo()?.username || ""}`,
+      )
+      .digest("hex")
+  } catch {
+    return "default-machine-fp"
+  }
+}
+
+const MACHINE_FP = getMachineFingerprint()
+
+// Dynamic machine-derived Base32 fallback so no hardcoded secret exists in the public repository
+function generateMachineBase32Fallback() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+  const hash = crypto
+    .createHash("sha256")
+    .update(`bubble-default-secret-${MACHINE_FP}`)
+    .digest()
+  let result = ""
+  for (let i = 0; i < 32; i++) {
+    result += chars[hash[i] % chars.length]
+  }
+  return result
+}
+
+const APP_TOTP_SECRET =
+  process.env.BUBBLE_TOTP_SECRET ||
+  embeddedSecret ||
+  generateMachineBase32Fallback()
+
+const SEC_ENC_KEY = crypto.scryptSync(APP_TOTP_SECRET, MACHINE_FP, 32)
+
+function encryptSecurityPayload(obj) {
+  try {
+    const iv = crypto.randomBytes(12)
+    const cipher = crypto.createCipheriv("aes-256-gcm", SEC_ENC_KEY, iv)
+    const plain = Buffer.from(JSON.stringify(obj), "utf8")
+    const enc = Buffer.concat([cipher.update(plain), cipher.final()])
+    const authTag = cipher.getAuthTag()
+    return Buffer.concat([iv, authTag, enc]).toString("base64")
+  } catch (err) {
+    console.error("[Security] Encryption error:", err)
+    return ""
+  }
+}
+
+function decryptSecurityPayload(base64Str) {
+  try {
+    const buf = Buffer.from(base64Str, "base64")
+    if (buf.length < 28) return null // 12 IV + 16 authTag
+    const iv = buf.subarray(0, 12)
+    const authTag = buf.subarray(12, 28)
+    const enc = buf.subarray(28)
+    const decipher = crypto.createDecipheriv("aes-256-gcm", SEC_ENC_KEY, iv)
+    decipher.setAuthTag(authTag)
+    const dec = Buffer.concat([decipher.update(enc), decipher.final()])
+    return JSON.parse(dec.toString("utf8"))
+  } catch {
+    return null
+  }
+}
+
 function readState() {
   try {
-    return JSON.parse(fs.readFileSync(stateFile, "utf8"))
+    const raw = JSON.parse(fs.readFileSync(stateFile, "utf8"))
+    if (raw && typeof raw._sec === "string") {
+      const sec = decryptSecurityPayload(raw._sec)
+      if (sec) {
+        return { ...raw, ...sec, _secValid: true }
+      } else {
+        return { ...raw, _secTampered: true }
+      }
+    }
+    return raw || {}
   } catch {
     return {}
   }
 }
 
-function writeState(patch) {
-  const next = { ...readState(), ...patch }
-  fs.mkdirSync(path.dirname(stateFile), { recursive: true })
-  fs.writeFileSync(stateFile, JSON.stringify(next))
-  return next
+function getShadowStorePaths() {
+  const paths = []
+  try {
+    if (process.platform === "win32") {
+      const localApp = process.env.LOCALAPPDATA || os.homedir()
+      paths.push(path.join(localApp, ".bubble-session.dat"))
+    } else if (process.platform === "darwin") {
+      paths.push(
+        path.join(os.homedir(), "Library", "Caches", ".bubble-session.dat"),
+      )
+    } else {
+      const xdgData =
+        process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share")
+      paths.push(path.join(xdgData, ".bubble-session.dat"))
+    }
+    paths.push(path.join(app.getPath("appData"), ".bubble-meta.dat"))
+  } catch {}
+  return paths
+}
+
+function writeShadowStores(data) {
+  const enc = encryptSecurityPayload(data)
+  const sig = crypto
+    .createHmac("sha256", APP_TOTP_SECRET)
+    .update(enc)
+    .digest("hex")
+  const encoded = Buffer.from(JSON.stringify({ enc, sig })).toString("base64")
+
+  for (const p of getShadowStorePaths()) {
+    try {
+      fs.mkdirSync(path.dirname(p), { recursive: true })
+      fs.writeFileSync(p, encoded, "utf8")
+    } catch {}
+  }
+}
+
+function readShadowStores() {
+  const shadows = []
+  for (const p of getShadowStorePaths()) {
+    try {
+      if (!fs.existsSync(p)) continue
+      const raw = fs.readFileSync(p, "utf8").trim()
+      if (!raw) continue
+      const jsonStr = Buffer.from(raw, "base64").toString("utf8")
+      const parsed = JSON.parse(jsonStr)
+      if (typeof parsed.enc === "string" && typeof parsed.sig === "string") {
+        const expectedSig = crypto
+          .createHmac("sha256", APP_TOTP_SECRET)
+          .update(parsed.enc)
+          .digest("hex")
+        if (parsed.sig === expectedSig) {
+          const dec = decryptSecurityPayload(parsed.enc)
+          if (dec) {
+            shadows.push({ ...dec, path: p, valid: true })
+          } else {
+            shadows.push({ path: p, valid: false, tampered: true })
+          }
+        } else {
+          shadows.push({ path: p, valid: false, tampered: true })
+        }
+      }
+    } catch {}
+  }
+  return shadows
+}
+
+// 4-hour accumulated usage limit configuration
+const DEFAULT_USAGE_LIMIT_SECONDS = 14400 // 4 hours = 240 minutes
+const MAX_FAILED_ATTEMPTS = 5
+const LOCKOUT_DURATION_MS = 5 * 60 * 1000 // 5 minutes = 300,000 ms
+
+function resolveInitialState(primary) {
+  const shadows = readShadowStores()
+  const now = Date.now()
+
+  // Case 0: Tampered primary config file
+  if (primary._secTampered) {
+    console.warn("[Security] Primary config file was tampered with! Locking.")
+    return {
+      isLocked: true,
+      remainingUsageSeconds: 0,
+      failedOtpAttempts: 5,
+      lockoutUntil: now + LOCKOUT_DURATION_MS,
+      sessionCycleId: "tampered_primary",
+      lastActiveTimestamp: now,
+    }
+  }
+
+  // Case 1: Tampered signature in any shadow store
+  const hasTamperedShadow = shadows.some((s) => s.tampered)
+  if (hasTamperedShadow) {
+    console.warn(
+      "[Security] Tampered shadow store signature detected! Locking.",
+    )
+    return {
+      isLocked: true,
+      remainingUsageSeconds: 0,
+      failedOtpAttempts: 5,
+      lockoutUntil: now + LOCKOUT_DURATION_MS,
+      sessionCycleId: "tampered_shadow",
+      lastActiveTimestamp: now,
+    }
+  }
+
+  const primaryHasUsage = typeof primary.remainingUsageSeconds === "number"
+  const hasValidShadow = shadows.length > 0
+
+  // Case 2: Primary file missing/emptied but shadow store exists (file deletion attempt)
+  if (!primaryHasUsage && hasValidShadow) {
+    console.warn(
+      "[Security] State file missing but shadow store exists! File deletion tamper detected. Locking.",
+    )
+    return {
+      isLocked: true,
+      remainingUsageSeconds: 0,
+      failedOtpAttempts: 5,
+      lockoutUntil: now + LOCKOUT_DURATION_MS,
+      sessionCycleId: "tampered_deletion",
+      lastActiveTimestamp: now,
+    }
+  }
+
+  // Case 3: Clean fresh install (neither primary nor shadow exists)
+  if (!primaryHasUsage && !hasValidShadow) {
+    const freshCycleId = crypto.randomBytes(8).toString("hex")
+    return {
+      isLocked: false,
+      remainingUsageSeconds: DEFAULT_USAGE_LIMIT_SECONDS,
+      failedOtpAttempts: 0,
+      lockoutUntil: 0,
+      sessionCycleId: freshCycleId,
+      lastActiveTimestamp: now,
+      initialInstallTimestamp: now,
+    }
+  }
+
+  // Case 4: Both exist -> Cross-validation
+  let minRemaining =
+    typeof primary.remainingUsageSeconds === "number" &&
+    primary.remainingUsageSeconds > 30
+      ? primary.remainingUsageSeconds
+      : DEFAULT_USAGE_LIMIT_SECONDS
+  let locked = Boolean(primary.isLocked && minRemaining <= 0)
+  let cycleId = primary.sessionCycleId || crypto.randomBytes(8).toString("hex")
+  let lastTimestamp = primary.lastActiveTimestamp || 0
+  let maxLockoutUntil = primary.lockoutUntil || 0
+  let maxFailedAttempts = primary.failedOtpAttempts || 0
+
+  for (const s of shadows) {
+    if (s.isLocked && s.remainingUsageSeconds <= 0) locked = true
+    if (
+      s.remainingUsageSeconds > 30 &&
+      s.remainingUsageSeconds < minRemaining
+    ) {
+      minRemaining = s.remainingUsageSeconds
+    }
+    if (s.lastActiveTimestamp > lastTimestamp) {
+      lastTimestamp = s.lastActiveTimestamp
+    }
+    if (s.lockoutUntil && s.lockoutUntil > maxLockoutUntil) {
+      maxLockoutUntil = s.lockoutUntil
+    }
+    if (s.failedOtpAttempts && s.failedOtpAttempts > maxFailedAttempts) {
+      maxFailedAttempts = s.failedOtpAttempts
+    }
+  }
+
+  // Reset test sessions back to full 4 hours
+  if (minRemaining <= 30) {
+    minRemaining = DEFAULT_USAGE_LIMIT_SECONDS
+    locked = false
+    maxLockoutUntil = 0
+    maxFailedAttempts = 0
+  }
+
+  // Value manipulation check: primary store had higher seconds than shadow
+  for (const s of shadows) {
+    if (
+      typeof primary.remainingUsageSeconds === "number" &&
+      primary.remainingUsageSeconds > s.remainingUsageSeconds + 30
+    ) {
+      console.warn(
+        "[Security] Primary store had higher seconds than shadow! Reverting to lowest shadow value.",
+      )
+      minRemaining = s.remainingUsageSeconds
+    }
+  }
+
+  // Clock rollback check (system time set backwards by > 1 minute)
+  if (lastTimestamp > 0 && now < lastTimestamp - 60000) {
+    console.warn("[Security] System clock rollback detected! Locking.")
+    locked = true
+    minRemaining = 0
+  }
+
+  if (minRemaining <= 0) {
+    locked = true
+    minRemaining = 0
+  }
+
+  return {
+    isLocked: locked,
+    remainingUsageSeconds: minRemaining,
+    failedOtpAttempts: maxFailedAttempts,
+    lockoutUntil: maxLockoutUntil,
+    sessionCycleId: cycleId,
+    lastActiveTimestamp: Math.max(now, lastTimestamp),
+    initialInstallTimestamp:
+      primary.initialInstallTimestamp ||
+      shadows[0]?.initialInstallTimestamp ||
+      now,
+  }
 }
 
 const savedSettings = readState()
@@ -92,6 +385,185 @@ let customPanelSize = savedSettings.panelSize || null
 if (savedSettings.theme) {
   nativeTheme.themeSource = savedSettings.theme.toLowerCase()
 }
+
+const resolvedUsage = resolveInitialState(savedSettings)
+let remainingUsageSeconds = resolvedUsage.remainingUsageSeconds
+let isLocked = resolvedUsage.isLocked
+let sessionCycleId = resolvedUsage.sessionCycleId
+let lastActiveTimestamp = resolvedUsage.lastActiveTimestamp
+let initialInstallTimestamp = resolvedUsage.initialInstallTimestamp
+let failedOtpAttempts = resolvedUsage.failedOtpAttempts || 0
+let lockoutUntil = resolvedUsage.lockoutUntil || 0
+
+function writeState(patch) {
+  const current = readState()
+  const next = { ...current, ...patch }
+
+  if (typeof patch.remainingUsageSeconds === "number") {
+    remainingUsageSeconds = patch.remainingUsageSeconds
+  }
+  if (typeof patch.isLocked === "boolean") {
+    isLocked = patch.isLocked
+  }
+  if (typeof patch.failedOtpAttempts === "number") {
+    failedOtpAttempts = patch.failedOtpAttempts
+  }
+  if (typeof patch.lockoutUntil === "number") {
+    lockoutUntil = patch.lockoutUntil
+  }
+  if (patch.sessionCycleId) {
+    sessionCycleId = patch.sessionCycleId
+  }
+  if (patch.lastActiveTimestamp) {
+    lastActiveTimestamp = patch.lastActiveTimestamp
+  }
+
+  const secBundle = {
+    remainingUsageSeconds,
+    isLocked,
+    failedOtpAttempts,
+    lockoutUntil,
+    sessionCycleId,
+    lastActiveTimestamp,
+    initialInstallTimestamp,
+  }
+
+  const diskState = { ...next }
+  delete diskState.remainingUsageSeconds
+  delete diskState.isLocked
+  delete diskState.failedOtpAttempts
+  delete diskState.lockoutUntil
+  delete diskState.sessionCycleId
+  delete diskState.lastActiveTimestamp
+  delete diskState.initialInstallTimestamp
+  delete diskState._secValid
+  delete diskState._secTampered
+
+  diskState._sec = encryptSecurityPayload(secBundle)
+
+  try {
+    fs.mkdirSync(path.dirname(stateFile), { recursive: true })
+    fs.writeFileSync(stateFile, JSON.stringify(diskState, null, 2))
+  } catch {}
+
+  writeShadowStores(secBundle)
+
+  return next
+}
+
+// Initial sync to ensure all stores are aligned
+writeState({
+  remainingUsageSeconds,
+  isLocked,
+  failedOtpAttempts,
+  lockoutUntil,
+  sessionCycleId,
+  lastActiveTimestamp,
+  initialInstallTimestamp,
+})
+
+// TOTP verification implementation (RFC 6238, 60-second period, ±30s tolerance)
+const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+function base32Decode(base32) {
+  const clean = String(base32)
+    .toUpperCase()
+    .replace(/=+$/, "")
+    .replace(/[\s-]/g, "")
+  let bits = ""
+  for (let i = 0; i < clean.length; i++) {
+    const val = BASE32_ALPHABET.indexOf(clean[i])
+    if (val === -1) continue
+    bits += val.toString(2).padStart(5, "0")
+  }
+  const bytes = []
+  for (let i = 0; i + 8 <= bits.length; i += 8) {
+    bytes.push(parseInt(bits.substring(i, i + 8), 2))
+  }
+  return Buffer.from(bytes)
+}
+
+function generateHOTP(secretBuffer, counter, digits = 6) {
+  const counterBuffer = Buffer.alloc(8)
+  counterBuffer.writeBigInt64BE(BigInt(counter), 0)
+  const hmac = crypto.createHmac("sha1", secretBuffer)
+  hmac.update(counterBuffer)
+  const digest = hmac.digest()
+  const offset = digest[digest.length - 1] & 0x0f
+  const codeInt =
+    ((digest[offset] & 0x7f) << 24) |
+    ((digest[offset + 1] & 0xff) << 16) |
+    ((digest[offset + 2] & 0xff) << 8) |
+    (digest[offset + 3] & 0xff)
+  return (codeInt % Math.pow(10, digits)).toString().padStart(digits, "0")
+}
+
+function verifyTOTP(token, base32Secret, period = 60, windowTolerance = 1) {
+  if (!token || !base32Secret) return false
+  const cleanToken = String(token).trim()
+  if (cleanToken.length !== 6) return false
+  try {
+    const secretBuffer = base32Decode(base32Secret)
+    const currentCounter = Math.floor(Date.now() / 1000 / period)
+    for (let i = -windowTolerance; i <= windowTolerance; i++) {
+      if (generateHOTP(secretBuffer, currentCounter + i, 6) === cleanToken) {
+        return true
+      }
+    }
+  } catch (err) {
+    console.error("TOTP verification error:", err)
+  }
+  return false
+}
+
+// Background accumulated usage timer: decrements every 10 seconds while active
+setInterval(() => {
+  if (!isLocked) {
+    const now = Date.now()
+    if (lastActiveTimestamp > 0 && now < lastActiveTimestamp - 60000) {
+      console.warn(
+        "[Security] Clock rollback detected during active session! Locking.",
+      )
+      isLocked = true
+      remainingUsageSeconds = 0
+      writeState({
+        remainingUsageSeconds: 0,
+        isLocked: true,
+        lastActiveTimestamp: now,
+      })
+      panelWin?.webContents.send("lock:status", {
+        isLocked: true,
+        remainingSeconds: 0,
+      })
+      return
+    }
+
+    lastActiveTimestamp = now
+    remainingUsageSeconds = Math.max(0, remainingUsageSeconds - 1)
+    if (remainingUsageSeconds <= 0) {
+      isLocked = true
+      writeState({
+        remainingUsageSeconds: 0,
+        isLocked: true,
+        lastActiveTimestamp: now,
+      })
+      panelWin?.webContents.send("lock:status", {
+        isLocked: true,
+        remainingSeconds: 0,
+      })
+    }
+  }
+}, 1000)
+
+// Periodic persistence
+setInterval(() => {
+  writeState({
+    remainingUsageSeconds,
+    isLocked,
+    sessionCycleId,
+    lastActiveTimestamp,
+  })
+}, 60000)
 
 function keepBubbleOnScreen(x, y) {
   const display =
@@ -271,6 +743,15 @@ function createPanel() {
   loadRoute(panelWin, "panel")
   panelWin.webContents.on("did-finish-load", () => {
     panelWin?.webContents.send("notifications:unread", unreadCounts)
+    const now = Date.now()
+    const lockoutRemainingSeconds =
+      lockoutUntil > now ? Math.ceil((lockoutUntil - now) / 1000) : 0
+    panelWin?.webContents.send("lock:status", {
+      isLocked,
+      remainingSeconds: remainingUsageSeconds,
+      lockoutRemainingSeconds,
+      failedAttempts: failedOtpAttempts,
+    })
     sendUpdateInfo(panelWin)
   })
   panelWin.on("closed", () => (panelWin = null))
@@ -691,6 +1172,84 @@ ipcMain.handle("system:trimMemory", async () => {
     ]).catch(() => {})
   } catch {}
   return true
+})
+ipcMain.handle("totp:getStatus", () => {
+  const now = Date.now()
+  const lockoutRemainingSeconds =
+    lockoutUntil > now ? Math.ceil((lockoutUntil - now) / 1000) : 0
+  return {
+    isLocked,
+    remainingSeconds: remainingUsageSeconds,
+    lockoutRemainingSeconds,
+    failedAttempts: failedOtpAttempts,
+  }
+})
+ipcMain.handle("totp:verify", (_e, code) => {
+  const now = Date.now()
+  // Block attempts while locked out
+  if (lockoutUntil > now) {
+    const lockoutRemainingSeconds = Math.ceil((lockoutUntil - now) / 1000)
+    return {
+      success: false,
+      error: "locked_out",
+      lockoutRemainingSeconds,
+      failedAttempts: failedOtpAttempts,
+    }
+  }
+
+  const secret = APP_TOTP_SECRET
+  const isValid = verifyTOTP(code, secret, 60, 1)
+  if (isValid) {
+    isLocked = false
+    failedOtpAttempts = 0
+    lockoutUntil = 0
+    remainingUsageSeconds = DEFAULT_USAGE_LIMIT_SECONDS
+    sessionCycleId = crypto.randomBytes(8).toString("hex")
+    lastActiveTimestamp = Date.now()
+    writeState({
+      remainingUsageSeconds: DEFAULT_USAGE_LIMIT_SECONDS,
+      isLocked: false,
+      failedOtpAttempts: 0,
+      lockoutUntil: 0,
+      sessionCycleId,
+      lastActiveTimestamp,
+    })
+    panelWin?.webContents.send("lock:status", {
+      isLocked: false,
+      remainingSeconds: remainingUsageSeconds,
+      lockoutRemainingSeconds: 0,
+      failedAttempts: 0,
+    })
+    return { success: true }
+  }
+
+  // Failed attempt
+  failedOtpAttempts += 1
+  let lockoutRemainingSeconds = 0
+  if (failedOtpAttempts >= MAX_FAILED_ATTEMPTS) {
+    lockoutUntil = now + LOCKOUT_DURATION_MS
+    failedOtpAttempts = 0
+    lockoutRemainingSeconds = Math.ceil(LOCKOUT_DURATION_MS / 1000)
+  }
+
+  writeState({
+    failedOtpAttempts,
+    lockoutUntil,
+  })
+
+  panelWin?.webContents.send("lock:status", {
+    isLocked: true,
+    remainingSeconds: remainingUsageSeconds,
+    lockoutRemainingSeconds,
+    failedAttempts: failedOtpAttempts,
+  })
+
+  return {
+    success: false,
+    error: lockoutRemainingSeconds > 0 ? "locked_out" : "invalid_code",
+    lockoutRemainingSeconds,
+    failedAttempts: failedOtpAttempts,
+  }
 })
 ipcMain.handle("app:getVersion", () => app.getVersion())
 ipcMain.handle("update:getInfo", () => updateInfo)

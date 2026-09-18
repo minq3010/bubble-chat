@@ -98,6 +98,8 @@ export const translations = {
     viewRelease: "Xem chi tiết",
     environment: "MÔI TRƯỜNG",
     appVersion: "Phiên bản ứng dụng",
+    sessionRemaining: "Thời hạn phiên",
+    sessionRemainingDesc: "Thời gian khả dụng trước khi yêu cầu xác thực OTP",
     developer: "NHÀ PHÁT TRIỂN",
     copy: "Sao chép",
     copied: "Đã chép",
@@ -131,6 +133,18 @@ export const translations = {
     switchTabQuickly: "Chuyển nhanh sang:",
     switchCustomUrl: "Đổi URL khác...",
     removeThisTab: "Bỏ tab này",
+
+    // Lock Screen
+    timeLimitReached: "Đã hết thời gian sử dụng",
+    timeLimitDesc:
+      "Phiên làm việc đã kết thúc. Vui lòng liên hệ admin để gia hạn",
+    enterAdminOtp: "Nhập mã OTP xác thực",
+    unlock: "Mở khóa",
+    unlocking: "Đang kiểm tra...",
+    invalidOtp: "Mã OTP không hợp lệ hoặc đã hết hạn",
+    invalidOtpWithAttempts: "Mã OTP không đúng. Còn lại {remaining} lần thử.",
+    temporarilyLocked: "Đã nhập sai 5 lần. Tạm khóa trong {time}.",
+    unlockSuccess: "Mở khóa thành công! Gia hạn thêm 4 giờ.",
   },
   en: {
     // Navigation / Sections
@@ -224,6 +238,8 @@ export const translations = {
     viewRelease: "View release",
     environment: "ENVIRONMENT",
     appVersion: "App version",
+    sessionRemaining: "Session remaining",
+    sessionRemainingDesc: "Time remaining before OTP verification is required",
     developer: "DEVELOPER",
     copy: "Copy",
     copied: "Copied",
@@ -257,6 +273,18 @@ export const translations = {
     switchTabQuickly: "Quick switch to:",
     switchCustomUrl: "Change URL...",
     removeThisTab: "Remove tab",
+
+    // Lock Screen
+    timeLimitReached: "Usage Time Limit Reached",
+    timeLimitDesc:
+      "Your 4-hour session has ended. Please ask Admin to enter the 6-digit OTP code from Google Authenticator to continue.",
+    enterAdminOtp: "Enter Admin OTP",
+    unlock: "Unlock",
+    unlocking: "Verifying...",
+    invalidOtp: "Invalid or expired OTP code",
+    invalidOtpWithAttempts: "Invalid OTP. {remaining} attempts remaining.",
+    temporarilyLocked: "Too many failed attempts. Locked for {time}.",
+    unlockSuccess: "Unlocked successfully! Added 4 hours.",
   },
 } as const
 
