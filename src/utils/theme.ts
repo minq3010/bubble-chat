@@ -4,17 +4,17 @@
  */
 export function withTransitionSuppression(fn: () => void) {
   if (typeof document === "undefined") {
-    fn();
-    return;
+    fn()
+    return
   }
-  const root = document.documentElement;
-  root.classList.add("disable-transitions");
-  fn();
+  const root = document.documentElement
+  root.classList.add("disable-transitions")
+  fn()
   // Force synchronous reflow so new CSS variables take effect without transition interpolation
-  void root.offsetHeight;
+  void root.offsetHeight
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      root.classList.remove("disable-transitions");
-    });
-  });
+      root.classList.remove("disable-transitions")
+    })
+  })
 }

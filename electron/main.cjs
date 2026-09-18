@@ -1,17 +1,44 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, shell, nativeImage, session, globalShortcut, net, nativeTheme, clipboard } = require("electron");
-const path = require("node:path");
-const fs = require("node:fs");
-const { compareVersions, selectAsset } = require("./update-utils.cjs");
+const {
+  app,
+  BrowserWindow,
+  Tray,
+  Menu,
+  ipcMain,
+  screen,
+  shell,
+  nativeImage,
+  session,
+  globalShortcut,
+  net,
+  nativeTheme,
+  clipboard,
+} = require("electron")
+const path = require("node:path")
+const fs = require("node:fs")
+const { compareVersions, selectAsset } = require("./update-utils.cjs")
 
-const DEV_URL = process.env.VITE_DEV_URL || "http://localhost:8443";
-const isDev = !app.isPackaged;
-const APP_ICON_PATH = path.join(__dirname, isDev ? "../public/bubble-chat-icon.png" : "../dist/bubble-chat-icon.png");
-const RELEASE_API = "https://api.github.com/repos/minq3010/bubble-chat/releases/latest";
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
-if (!hasSingleInstanceLock) app.quit();
+const DEV_URL = process.env.VITE_DEV_URL || "http://localhost:8443"
+const isDev = !app.isPackaged
+const APP_ICON_PATH = path.join(
+  __dirname,
+  isDev ? "../public/bubble-chat-icon.png" : "../dist/bubble-chat-icon.png",
+)
+const RELEASE_API =
+  "https://api.github.com/repos/minq3010/bubble-chat/releases/latest"
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) app.quit()
 
-const BUBBLE = 88; // window size (room for bubble + shadow/badge without clipping)
-const PANEL_MARGIN = 0; // zero outer margin, no blurry outer shadow halo
+// Optimize Chromium RAM & V8 heap usage
+app.commandLine.appendSwitch("js-flags", "--max-old-space-size=256")
+app.commandLine.appendSwitch("renderer-process-limit", "3")
+app.commandLine.appendSwitch("disable-gpu-shader-disk-cache")
+app.commandLine.appendSwitch(
+  "enable-features",
+  "ResourceEfficientLayoutng,CalculateNativeWinOcclusion",
+)
+
+const BUBBLE = 88 // window size (room for bubble + shadow/badge without clipping)
+const PANEL_MARGIN = 0 // zero outer margin, no blurry outer shadow halo
 const PANEL_CONFIG = {
   defaultWidth: 365,
   minWidth: 240,
@@ -21,137 +48,169 @@ const PANEL_CONFIG = {
   minHeight: 300,
   maxHeight: 550,
   heightRatio: 0.57,
-};
+}
 
-let bubbleWin = null;
-let panelWin = null;
-let tray = null;
-let dragTimer = null;
-let dragOffset = null;
-const stateFile = path.join(app.getPath("userData"), "bubble-state.json");
-const unreadCounts = { messenger: 0, zalo: 0 };
-let closeOnBlur = true;
-let showBubbleOnStartup = true;
-let rememberPosition = true;
-let snapToEdge = true;
-let panelShowTimestamp = 0;
-let lastPanelBlurHide = 0;
-let panelWasVisibleBeforeDrag = false;
-let updateCheck = null;
-let updateInfo = { status: "idle", currentVersion: app.getVersion() };
+let bubbleWin = null
+let panelWin = null
+let tray = null
+let dragTimer = null
+let dragOffset = null
+const stateFile = path.join(app.getPath("userData"), "bubble-state.json")
+const unreadCounts = { messenger: 0, zalo: 0, custom: 0 }
+let closeOnBlur = true
+let showBubbleOnStartup = true
+let rememberPosition = true
+let snapToEdge = true
+let panelShowTimestamp = 0
+let lastPanelBlurHide = 0
+let panelWasVisibleBeforeDrag = false
+let updateCheck = null
+let updateInfo = { status: "idle", currentVersion: app.getVersion() }
 
 function readState() {
   try {
-    return JSON.parse(fs.readFileSync(stateFile, "utf8"));
+    return JSON.parse(fs.readFileSync(stateFile, "utf8"))
   } catch {
-    return {};
+    return {}
   }
 }
 
 function writeState(patch) {
-  const next = { ...readState(), ...patch };
-  fs.mkdirSync(path.dirname(stateFile), { recursive: true });
-  fs.writeFileSync(stateFile, JSON.stringify(next));
-  return next;
+  const next = { ...readState(), ...patch }
+  fs.mkdirSync(path.dirname(stateFile), { recursive: true })
+  fs.writeFileSync(stateFile, JSON.stringify(next))
+  return next
 }
 
-const savedSettings = readState();
-closeOnBlur = savedSettings.closeOnBlur !== false;
-showBubbleOnStartup = savedSettings.showBubbleOnStartup !== false;
-rememberPosition = savedSettings.rememberPosition !== false;
-snapToEdge = savedSettings.snapToEdge !== false;
-let alwaysOnTop = savedSettings.alwaysOnTop !== false;
-let customPanelSize = savedSettings.panelSize || null;
+const savedSettings = readState()
+closeOnBlur = savedSettings.closeOnBlur !== false
+showBubbleOnStartup = savedSettings.showBubbleOnStartup !== false
+rememberPosition = savedSettings.rememberPosition !== false
+snapToEdge = savedSettings.snapToEdge !== false
+let alwaysOnTop = savedSettings.alwaysOnTop !== false
+let customPanelSize = savedSettings.panelSize || null
 if (savedSettings.theme) {
-  nativeTheme.themeSource = savedSettings.theme.toLowerCase();
+  nativeTheme.themeSource = savedSettings.theme.toLowerCase()
 }
 
 function keepBubbleOnScreen(x, y) {
-  const display = screen.getAllDisplays().find(({ bounds }) =>
-    x + BUBBLE / 2 >= bounds.x && x + BUBBLE / 2 <= bounds.x + bounds.width &&
-    y + BUBBLE / 2 >= bounds.y && y + BUBBLE / 2 <= bounds.y + bounds.height,
-  ) || screen.getPrimaryDisplay();
-  const wa = display.workArea;
+  const display =
+    screen
+      .getAllDisplays()
+      .find(
+        ({ bounds }) =>
+          x + BUBBLE / 2 >= bounds.x &&
+          x + BUBBLE / 2 <= bounds.x + bounds.width &&
+          y + BUBBLE / 2 >= bounds.y &&
+          y + BUBBLE / 2 <= bounds.y + bounds.height,
+      ) || screen.getPrimaryDisplay()
+  const wa = display.workArea
   return {
     x: Math.min(Math.max(wa.x, x), wa.x + wa.width - BUBBLE),
     y: Math.min(Math.max(wa.y, y), wa.y + wa.height - BUBBLE),
-  };
+  }
 }
 
 /** Resolve a renderer route in dev (Vite) or prod (built file + hash). */
 function loadRoute(win, hash) {
   if (isDev) {
-    win.loadURL(`${DEV_URL}/#${hash}`);
+    win.loadURL(`${DEV_URL}/#${hash}`)
   } else {
-    win.loadFile(path.join(__dirname, "../dist/index.html"), { hash });
+    win.loadFile(path.join(__dirname, "../dist/index.html"), { hash })
   }
 }
 
 function sendUpdateInfo(win) {
-  if (win && !win.isDestroyed()) win.webContents.send("update:status", updateInfo);
+  if (win && !win.isDestroyed())
+    win.webContents.send("update:status", updateInfo)
 }
 
 function setUpdateInfo(next) {
-  updateInfo = next;
-  sendUpdateInfo(panelWin);
+  updateInfo = next
+  sendUpdateInfo(panelWin)
 }
 
 function isTrustedReleaseUrl(value) {
   try {
-    const url = new URL(value);
-    return url.protocol === "https:" && url.hostname === "github.com" && url.pathname.startsWith("/minq3010/bubble-chat/releases/");
+    const url = new URL(value)
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "github.com" &&
+      url.pathname.startsWith("/minq3010/bubble-chat/releases/")
+    )
   } catch {
-    return false;
+    return false
   }
 }
 
 async function checkAppUpdate() {
-  if (updateCheck) return updateCheck;
-  const currentVersion = app.getVersion();
-  setUpdateInfo({ status: "checking", currentVersion });
+  if (updateCheck) return updateCheck
+  const currentVersion = app.getVersion()
+  setUpdateInfo({ status: "checking", currentVersion })
   updateCheck = (async () => {
     try {
       const response = await net.fetch(RELEASE_API, {
-        headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
         signal: AbortSignal.timeout(10000),
-      });
-      if (response.status === 404) return { status: "up-to-date", currentVersion };
-      if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
-      const release = await response.json();
-      const latestVersion = typeof release.tag_name === "string" ? release.tag_name : "";
-      const comparison = compareVersions(latestVersion, currentVersion);
-      if (comparison === null) throw new Error("Invalid release version");
-      if (comparison <= 0) return { status: "up-to-date", currentVersion, latestVersion };
-      const releaseUrl = typeof release.html_url === "string" && isTrustedReleaseUrl(release.html_url) ? release.html_url : undefined;
-      const asset = selectAsset(release.assets, process.platform, process.arch);
+      })
+      if (response.status === 404)
+        return { status: "up-to-date", currentVersion }
+      if (!response.ok) throw new Error(`GitHub returned ${response.status}`)
+      const release = await response.json()
+      const latestVersion =
+        typeof release.tag_name === "string" ? release.tag_name : ""
+      const comparison = compareVersions(latestVersion, currentVersion)
+      if (comparison === null) throw new Error("Invalid release version")
+      if (comparison <= 0)
+        return { status: "up-to-date", currentVersion, latestVersion }
+      const releaseUrl =
+        typeof release.html_url === "string" &&
+        isTrustedReleaseUrl(release.html_url)
+          ? release.html_url
+          : undefined
+      const asset = selectAsset(release.assets, process.platform, process.arch)
       return {
         status: "available",
         currentVersion,
         latestVersion,
-        releaseNotes: typeof release.body === "string" ? release.body.slice(0, 2000) : undefined,
-        downloadUrl: isTrustedReleaseUrl(asset?.browser_download_url) ? asset.browser_download_url : undefined,
+        releaseNotes:
+          typeof release.body === "string"
+            ? release.body.slice(0, 2000)
+            : undefined,
+        downloadUrl: isTrustedReleaseUrl(asset?.browser_download_url)
+          ? asset.browser_download_url
+          : undefined,
         releaseUrl,
-      };
+      }
     } catch {
-      return { status: "error", currentVersion, error: "Couldn't check for updates. Try again." };
+      return {
+        status: "error",
+        currentVersion,
+        error: "Couldn't check for updates. Try again.",
+      }
     }
-  })();
+  })()
   try {
-    const next = await updateCheck;
-    setUpdateInfo(next);
-    return next;
+    const next = await updateCheck
+    setUpdateInfo(next)
+    return next
   } finally {
-    updateCheck = null;
+    updateCheck = null
   }
 }
 
 function createBubble() {
-  const { workArea } = screen.getPrimaryDisplay();
-  const saved = rememberPosition && readState().bubblePosition;
-  const start = saved ? keepBubbleOnScreen(saved.x, saved.y) : {
-    x: workArea.x + workArea.width - BUBBLE - 24,
-    y: workArea.y + Math.round(workArea.height * 0.4),
-  };
+  const { workArea } = screen.getPrimaryDisplay()
+  const saved = rememberPosition && readState().bubblePosition
+  const start = saved
+    ? keepBubbleOnScreen(saved.x, saved.y)
+    : {
+        x: workArea.x + workArea.width - BUBBLE - 24,
+        y: workArea.y + Math.round(workArea.height * 0.4),
+      }
   bubbleWin = new BrowserWindow({
     icon: APP_ICON_PATH,
     width: BUBBLE,
@@ -172,18 +231,20 @@ function createBubble() {
       contextIsolation: true,
       nodeIntegration: false,
     },
-  });
-  bubbleWin.setIgnoreMouseEvents(false);
-  bubbleWin.setAlwaysOnTop(alwaysOnTop, "screen-saver");
-  bubbleWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  loadRoute(bubbleWin, "bubble");
-  bubbleWin.webContents.on("did-finish-load", () => bubbleWin?.webContents.send("notifications:unread", unreadCounts));
-  bubbleWin.on("closed", () => (bubbleWin = null));
+  })
+  bubbleWin.setIgnoreMouseEvents(false)
+  bubbleWin.setAlwaysOnTop(alwaysOnTop, "screen-saver")
+  bubbleWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  loadRoute(bubbleWin, "bubble")
+  bubbleWin.webContents.on("did-finish-load", () =>
+    bubbleWin?.webContents.send("notifications:unread", unreadCounts),
+  )
+  bubbleWin.on("closed", () => (bubbleWin = null))
 }
 
 function createPanel() {
-  const { workArea } = screen.getPrimaryDisplay();
-  const { width, height } = getPanelSize(workArea);
+  const { workArea } = screen.getPrimaryDisplay()
+  const { width, height } = getPanelSize(workArea)
   panelWin = new BrowserWindow({
     icon: APP_ICON_PATH,
     width,
@@ -203,149 +264,206 @@ function createPanel() {
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true, // enables <webview> for Messenger/Zalo
+      backgroundThrottling: true,
     },
-  });
-  panelWin.setAlwaysOnTop(alwaysOnTop, "screen-saver");
-  loadRoute(panelWin, "panel");
+  })
+  panelWin.setAlwaysOnTop(alwaysOnTop, "screen-saver")
+  loadRoute(panelWin, "panel")
   panelWin.webContents.on("did-finish-load", () => {
-    panelWin?.webContents.send("notifications:unread", unreadCounts);
-    sendUpdateInfo(panelWin);
-  });
-  panelWin.on("closed", () => (panelWin = null));
-  let panelResizeTimer = null;
+    panelWin?.webContents.send("notifications:unread", unreadCounts)
+    sendUpdateInfo(panelWin)
+  })
+  panelWin.on("closed", () => (panelWin = null))
+  let panelResizeTimer = null
   panelWin.on("resize", () => {
-    if (panelResizeTimer) clearTimeout(panelResizeTimer);
+    if (panelResizeTimer) clearTimeout(panelResizeTimer)
     panelResizeTimer = setTimeout(() => {
-      if (!panelWin || panelWin.isDestroyed()) return;
-      const [width, height] = panelWin.getSize();
-      customPanelSize = { width, height };
-      writeState({ panelSize: customPanelSize });
-    }, 250);
-  });
+      if (!panelWin || panelWin.isDestroyed()) return
+      const [width, height] = panelWin.getSize()
+      customPanelSize = { width, height }
+      writeState({ panelSize: customPanelSize })
+    }, 250)
+  })
   panelWin.on("blur", () => {
-    if (Date.now() - panelShowTimestamp < 400) return;
+    if (Date.now() - panelShowTimestamp < 400) return
     setTimeout(() => {
-      if (!panelWin || panelWin.isDestroyed()) return;
-      const isBubbleActive = BrowserWindow.getFocusedWindow() === bubbleWin || isCursorOverBubble();
+      if (!panelWin || panelWin.isDestroyed()) return
+      const isBubbleActive =
+        BrowserWindow.getFocusedWindow() === bubbleWin || isCursorOverBubble()
       if (closeOnBlur && !isBubbleActive) {
-        lastPanelBlurHide = Date.now();
-        panelWin.hide();
+        lastPanelBlurHide = Date.now()
+        panelWin.hide()
       }
-    }, 50);
-  });
+    }, 50)
+  })
 }
 
 function isCursorOverBubble() {
-  if (!bubbleWin || bubbleWin.isDestroyed()) return false;
-  const cursor = screen.getCursorScreenPoint();
-  const [bx, by] = bubbleWin.getPosition();
-  const [bw, bh] = bubbleWin.getSize();
+  if (!bubbleWin || bubbleWin.isDestroyed()) return false
+  const cursor = screen.getCursorScreenPoint()
+  const [bx, by] = bubbleWin.getPosition()
+  const [bw, bh] = bubbleWin.getSize()
   return (
-    cursor.x >= bx && cursor.x <= bx + bw &&
-    cursor.y >= by && cursor.y <= by + bh
-  );
+    cursor.x >= bx &&
+    cursor.x <= bx + bw &&
+    cursor.y >= by &&
+    cursor.y <= by + bh
+  )
 }
 
 function getPanelSize(workArea) {
-  if (customPanelSize && typeof customPanelSize.width === "number" && typeof customPanelSize.height === "number") {
-    const width = Math.min(Math.max(PANEL_CONFIG.minWidth, Math.round(customPanelSize.width)), workArea.width);
-    const height = Math.min(Math.max(PANEL_CONFIG.minHeight, Math.round(customPanelSize.height)), workArea.height);
-    return { width, height };
+  if (
+    customPanelSize &&
+    typeof customPanelSize.width === "number" &&
+    typeof customPanelSize.height === "number"
+  ) {
+    const width = Math.min(
+      Math.max(PANEL_CONFIG.minWidth, Math.round(customPanelSize.width)),
+      workArea.width,
+    )
+    const height = Math.min(
+      Math.max(PANEL_CONFIG.minHeight, Math.round(customPanelSize.height)),
+      workArea.height,
+    )
+    return { width, height }
   }
-  const targetWidth = Math.min(PANEL_CONFIG.maxWidth, Math.max(PANEL_CONFIG.minWidth, Math.round(workArea.width * PANEL_CONFIG.widthRatio)));
-  const width = targetWidth || PANEL_CONFIG.defaultWidth;
-  const targetHeight = Math.min(PANEL_CONFIG.maxHeight, Math.max(PANEL_CONFIG.minHeight, Math.round(workArea.height * PANEL_CONFIG.heightRatio)));
-  const height = targetHeight || PANEL_CONFIG.defaultHeight;
-  return { width, height };
+  const targetWidth = Math.min(
+    PANEL_CONFIG.maxWidth,
+    Math.max(
+      PANEL_CONFIG.minWidth,
+      Math.round(workArea.width * PANEL_CONFIG.widthRatio),
+    ),
+  )
+  const width = targetWidth || PANEL_CONFIG.defaultWidth
+  const targetHeight = Math.min(
+    PANEL_CONFIG.maxHeight,
+    Math.max(
+      PANEL_CONFIG.minHeight,
+      Math.round(workArea.height * PANEL_CONFIG.heightRatio),
+    ),
+  )
+  const height = targetHeight || PANEL_CONFIG.defaultHeight
+  return { width, height }
 }
 
 /** Position the panel beside the bubble, on whichever side has more room. */
 function positionPanelNearBubble() {
-  if (!bubbleWin || !panelWin) return;
-  const [bx, by] = bubbleWin.getPosition();
-  const disp = screen.getDisplayNearestPoint({ x: bx + BUBBLE / 2, y: by + BUBBLE / 2 });
-  const wa = disp.workArea;
-  const { width, height } = getPanelSize(wa);
-  const spaceRight = wa.x + wa.width - (bx + BUBBLE);
-  const openRight = spaceRight >= width + 8;
-  let px = openRight ? bx + BUBBLE + 6 : bx - width - 6;
-  px = Math.min(Math.max(wa.x, px), Math.max(wa.x, wa.x + wa.width - width));
-  let py = by - 30;
-  py = Math.min(Math.max(wa.y, py), Math.max(wa.y, wa.y + wa.height - height));
-  panelWin.setBounds({ x: Math.round(px), y: Math.round(py), width, height });
+  if (!bubbleWin || !panelWin) return
+  const [bx, by] = bubbleWin.getPosition()
+  const disp = screen.getDisplayNearestPoint({
+    x: bx + BUBBLE / 2,
+    y: by + BUBBLE / 2,
+  })
+  const wa = disp.workArea
+  const { width, height } = getPanelSize(wa)
+  const spaceRight = wa.x + wa.width - (bx + BUBBLE)
+  const openRight = spaceRight >= width + 8
+  let px = openRight ? bx + BUBBLE + 6 : bx - width - 6
+  px = Math.min(Math.max(wa.x, px), Math.max(wa.x, wa.x + wa.width - width))
+  let py = by - 30
+  py = Math.min(Math.max(wa.y, py), Math.max(wa.y, wa.y + wa.height - height))
+  panelWin.setBounds({ x: Math.round(px), y: Math.round(py), width, height })
 }
 
 function togglePanel() {
-  if (Date.now() - lastPanelBlurHide < 350) return;
-  if (!panelWin) createPanel();
+  if (Date.now() - lastPanelBlurHide < 350) return
+  if (!panelWin) createPanel()
   if (panelWin.isVisible()) {
-    panelWin.hide();
+    panelWin.hide()
   } else {
-    positionPanelNearBubble();
-    panelShowTimestamp = Date.now();
-    panelWin.show();
-    panelWin.focus();
+    positionPanelNearBubble()
+    panelShowTimestamp = Date.now()
+    panelWin.show()
+    panelWin.focus()
   }
 }
 
 /** Snap the bubble to the nearest vertical edge of its current display. */
 function snapBubble() {
-  if (!bubbleWin) return;
-  const [bx, by] = bubbleWin.getPosition();
-  const disp = screen.getDisplayNearestPoint({ x: bx + BUBBLE / 2, y: by + BUBBLE / 2 });
-  const wa = disp.workArea;
-  const center = bx + BUBBLE / 2;
-  const toRight = center > wa.x + wa.width / 2;
-  const nx = toRight ? wa.x + wa.width - BUBBLE + 6 : wa.x - 6;
-  const ny = Math.min(Math.max(wa.y, by), wa.y + wa.height - BUBBLE);
-  bubbleWin.setPosition(Math.round(nx), Math.round(ny));
+  if (!bubbleWin) return
+  const [bx, by] = bubbleWin.getPosition()
+  const disp = screen.getDisplayNearestPoint({
+    x: bx + BUBBLE / 2,
+    y: by + BUBBLE / 2,
+  })
+  const wa = disp.workArea
+  const center = bx + BUBBLE / 2
+  const toRight = center > wa.x + wa.width / 2
+  const nx = toRight ? wa.x + wa.width - BUBBLE + 6 : wa.x - 6
+  const ny = Math.min(Math.max(wa.y, by), wa.y + wa.height - BUBBLE)
+  bubbleWin.setPosition(Math.round(nx), Math.round(ny))
 }
 
 function restoreBubbleIfOffscreen() {
-  if (!bubbleWin) return;
-  const [x, y] = bubbleWin.getPosition();
-  const visible = screen.getAllDisplays().some(({ workArea }) =>
-    x + BUBBLE > workArea.x && x < workArea.x + workArea.width &&
-    y + BUBBLE > workArea.y && y < workArea.y + workArea.height,
-  );
+  if (!bubbleWin) return
+  const [x, y] = bubbleWin.getPosition()
+  const visible = screen
+    .getAllDisplays()
+    .some(
+      ({ workArea }) =>
+        x + BUBBLE > workArea.x &&
+        x < workArea.x + workArea.width &&
+        y + BUBBLE > workArea.y &&
+        y < workArea.y + workArea.height,
+    )
   if (!visible) {
-    const wa = screen.getPrimaryDisplay().workArea;
-    bubbleWin.setPosition(wa.x + wa.width - BUBBLE - 24, wa.y + Math.round(wa.height * 0.4));
+    const wa = screen.getPrimaryDisplay().workArea
+    bubbleWin.setPosition(
+      wa.x + wa.width - BUBBLE - 24,
+      wa.y + Math.round(wa.height * 0.4),
+    )
   }
 }
 
 function stopDrag() {
-  if (dragTimer) clearInterval(dragTimer);
-  dragTimer = null;
-  dragOffset = null;
+  if (dragTimer) clearInterval(dragTimer)
+  dragTimer = null
+  dragOffset = null
 }
 
 function buildTray() {
-  const icon = nativeImage.createFromPath(APP_ICON_PATH).resize({ width: 32, height: 32 });
-  tray = new Tray(icon);
-  tray.setToolTip("Bubble Chat — Messenger + Zalo");
+  const icon = nativeImage
+    .createFromPath(APP_ICON_PATH)
+    .resize({ width: 32, height: 32 })
+  tray = new Tray(icon)
+  tray.setToolTip("Bubble Chat — Messenger + Zalo")
   const menu = Menu.buildFromTemplate([
-    { label: "Show / Hide Bubble Chat", click: () => (bubbleWin?.isVisible() ? bubbleWin.hide() : bubbleWin?.show()) },
+    {
+      label: "Show / Hide Bubble Chat",
+      click: () =>
+        bubbleWin?.isVisible() ? bubbleWin.hide() : bubbleWin?.show(),
+    },
     { type: "separator" },
     { label: "Messenger", click: () => openProvider("messenger") },
     { label: "Zalo", click: () => openProvider("zalo") },
     { type: "separator" },
-    { label: "Start at Login", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin, click: (i) => app.setLoginItemSettings({ openAtLogin: i.checked }) },
-    { label: "Performance Mode", submenu: [
-      { label: "Low Memory", click: () => setPerformanceMode("Low Memory") },
-      { label: "Balanced", click: () => setPerformanceMode("Balanced") },
-      { label: "Instant Switching", click: () => setPerformanceMode("Instant Switching") },
-    ] },
+    {
+      label: "Start at Login",
+      type: "checkbox",
+      checked: app.getLoginItemSettings().openAtLogin,
+      click: (i) => app.setLoginItemSettings({ openAtLogin: i.checked }),
+    },
+    {
+      label: "Performance Mode",
+      submenu: [
+        { label: "Low Memory", click: () => setPerformanceMode("Low Memory") },
+        { label: "Balanced", click: () => setPerformanceMode("Balanced") },
+        {
+          label: "Instant Switching",
+          click: () => setPerformanceMode("Instant Switching"),
+        },
+      ],
+    },
     { label: "Settings…", click: () => openProvider("settings") },
     { type: "separator" },
     { label: "Quit Bubble Chat", click: () => app.quit() },
-  ]);
-  tray.setContextMenu(menu);
-  tray.on("click", () => togglePanel());
+  ])
+  tray.setContextMenu(menu)
+  tray.on("click", () => togglePanel())
 }
 
 function showBubbleContextMenu() {
-  if (!bubbleWin) return;
+  if (!bubbleWin) return
   Menu.buildFromTemplate([
     { label: "Open Messenger", click: () => openProvider("messenger") },
     { label: "Open Zalo", click: () => openProvider("zalo") },
@@ -354,145 +472,152 @@ function showBubbleContextMenu() {
     { label: "Settings…", click: () => openProvider("settings") },
     { type: "separator" },
     { label: "Quit Bubble Chat", click: () => app.quit() },
-  ]).popup({ window: bubbleWin });
+  ]).popup({ window: bubbleWin })
 }
 
 function openProvider(which) {
-  if (!["messenger", "zalo", "settings"].includes(which)) return;
-  if (!panelWin) createPanel();
-  positionPanelNearBubble();
-  panelShowTimestamp = Date.now();
-  panelWin.show();
-  panelWin.moveTop();
-  panelWin.focus();
-  panelWin.webContents.send("panel:navigate", which);
+  if (!["messenger", "zalo", "custom", "settings"].includes(which)) return
+  if (!panelWin) createPanel()
+  positionPanelNearBubble()
+  panelShowTimestamp = Date.now()
+  panelWin.show()
+  panelWin.moveTop()
+  panelWin.focus()
+  panelWin.webContents.send("panel:navigate", which)
 }
 
 function setPerformanceMode(mode) {
-  writeState({ performanceMode: mode });
-  panelWin?.webContents.send("settings:performance", mode);
+  writeState({ performanceMode: mode })
+  panelWin?.webContents.send("settings:performance", mode)
 }
 
 function registerShortcuts() {
   globalShortcut.register("Alt+CommandOrControl+B", () => {
-    bubbleWin?.isVisible() ? bubbleWin.hide() : bubbleWin?.show();
-  });
-  globalShortcut.register("Alt+CommandOrControl+M", () => openProvider("messenger"));
-  globalShortcut.register("Alt+CommandOrControl+Z", () => openProvider("zalo"));
+    bubbleWin?.isVisible() ? bubbleWin.hide() : bubbleWin?.show()
+  })
+  globalShortcut.register("Alt+CommandOrControl+M", () =>
+    openProvider("messenger"),
+  )
+  globalShortcut.register("Alt+CommandOrControl+Z", () => openProvider("zalo"))
 }
 
-let isDragging = false;
+let isDragging = false
 
 ipcMain.on("bubble:dragStart", () => {
-  if (!bubbleWin) return;
-  stopDrag();
-  isDragging = true;
-  panelWasVisibleBeforeDrag = Boolean(panelWin?.isVisible());
+  if (!bubbleWin) return
+  stopDrag()
+  isDragging = true
+  panelWasVisibleBeforeDrag = Boolean(panelWin?.isVisible())
   if (panelWasVisibleBeforeDrag) {
-    panelWin.hide();
+    panelWin.hide()
   }
-  const cursor = screen.getCursorScreenPoint();
-  const [bx, by] = bubbleWin.getPosition();
-  dragOffset = { x: cursor.x - bx, y: cursor.y - by };
-  let lastBx = -1;
-  let lastBy = -1;
+  const cursor = screen.getCursorScreenPoint()
+  const [bx, by] = bubbleWin.getPosition()
+  dragOffset = { x: cursor.x - bx, y: cursor.y - by }
+  let lastBx = -1
+  let lastBy = -1
   dragTimer = setInterval(() => {
-    if (!bubbleWin || !dragOffset) return;
-    const c = screen.getCursorScreenPoint();
-    const nx = Math.round(c.x - dragOffset.x);
-    const ny = Math.round(c.y - dragOffset.y);
-    if (nx === lastBx && ny === lastBy) return;
-    lastBx = nx;
-    lastBy = ny;
-    bubbleWin.setPosition(nx, ny);
-  }, 16);
-});
+    if (!bubbleWin || !dragOffset) return
+    const c = screen.getCursorScreenPoint()
+    const nx = Math.round(c.x - dragOffset.x)
+    const ny = Math.round(c.y - dragOffset.y)
+    if (nx === lastBx && ny === lastBy) return
+    lastBx = nx
+    lastBy = ny
+    bubbleWin.setPosition(nx, ny)
+  }, 16)
+})
 ipcMain.on("bubble:dragEnd", () => {
-  stopDrag();
-  if (!isDragging) return;
-  isDragging = false;
+  stopDrag()
+  if (!isDragging) return
+  isDragging = false
 
   if (snapToEdge) {
-    snapBubble();
+    snapBubble()
   }
   if (bubbleWin) {
-    const [x, y] = bubbleWin.getPosition();
-    if (rememberPosition) writeState({ bubblePosition: { x, y } });
+    const [x, y] = bubbleWin.getPosition()
+    if (rememberPosition) writeState({ bubblePosition: { x, y } })
   }
 
   if (panelWasVisibleBeforeDrag) {
-    if (!panelWin) createPanel();
-    positionPanelNearBubble();
-    panelShowTimestamp = Date.now();
-    panelWin.show();
-    panelWin.focus();
+    if (!panelWin) createPanel()
+    positionPanelNearBubble()
+    panelShowTimestamp = Date.now()
+    panelWin.show()
+    panelWin.focus()
   }
-  panelWasVisibleBeforeDrag = false;
-});
+  panelWasVisibleBeforeDrag = false
+})
 ipcMain.on("bubble:click", () => {
-  stopDrag();
-  isDragging = false;
-  togglePanel();
-});
-ipcMain.on("panel:collapse", () => panelWin?.hide());
+  stopDrag()
+  isDragging = false
+  togglePanel()
+})
+ipcMain.on("panel:collapse", () => panelWin?.hide())
 ipcMain.on("panel:resetSize", () => {
-  customPanelSize = null;
-  writeState({ panelSize: null });
+  customPanelSize = null
+  writeState({ panelSize: null })
   if (panelWin && !panelWin.isDestroyed()) {
-    positionPanelNearBubble();
+    positionPanelNearBubble()
   }
-});
+})
 ipcMain.on("open:external", (_e, url) => {
-  if (url === "https://www.messenger.com" || url === "https://chat.zalo.me") shell.openExternal(url);
-});
-ipcMain.on("bubble:show", () => bubbleWin?.show());
-ipcMain.on("bubble:hide", () => bubbleWin?.hide());
-ipcMain.on("bubble:contextMenu", showBubbleContextMenu);
-ipcMain.on("provider:open", (_e, which) => openProvider(which));
-ipcMain.on("app:quit", () => app.quit());
-ipcMain.on("settings:login", (_e, enabled) => {
-  const openAtLogin = Boolean(enabled);
-  writeState({ startAtLogin: openAtLogin });
-  app.setLoginItemSettings({ openAtLogin });
-});
-ipcMain.on("settings:alwaysOnTop", (_e, enabled) => {
-  alwaysOnTop = Boolean(enabled);
-  writeState({ alwaysOnTop });
-  bubbleWin?.setAlwaysOnTop(alwaysOnTop, "screen-saver");
-  panelWin?.setAlwaysOnTop(alwaysOnTop, "screen-saver");
-});
-ipcMain.on("settings:closeOnBlur", (_e, enabled) => {
-  closeOnBlur = Boolean(enabled);
-  writeState({ closeOnBlur });
-});
-ipcMain.on("settings:showBubbleOnStartup", (_e, enabled) => {
-  showBubbleOnStartup = Boolean(enabled);
-  writeState({ showBubbleOnStartup });
-  if (showBubbleOnStartup) bubbleWin?.show();
-  else bubbleWin?.hide();
-});
-ipcMain.on("settings:rememberPosition", (_e, enabled) => {
-  rememberPosition = Boolean(enabled);
-  writeState({ rememberPosition });
-});
-ipcMain.on("settings:snapToEdge", (_e, enabled) => {
-  snapToEdge = Boolean(enabled);
-  writeState({ snapToEdge });
-});
-ipcMain.on("settings:performance", (_e, mode) => setPerformanceMode(mode));
-ipcMain.on("settings:appearance", (_e, data) => {
-  const patch = {};
-  if (data?.theme) {
-    patch.theme = data.theme;
-    nativeTheme.themeSource = data.theme.toLowerCase();
+  if (
+    typeof url === "string" &&
+    (url.startsWith("https://") || url.startsWith("http://"))
+  ) {
+    shell.openExternal(url)
   }
-  if (data?.bubbleSize) patch.bubbleSize = data.bubbleSize;
-  writeState(patch);
-  bubbleWin?.webContents.send("settings:appearance", data);
-  panelWin?.webContents.send("settings:appearance", data);
-});
+})
+ipcMain.on("bubble:show", () => bubbleWin?.show())
+ipcMain.on("bubble:hide", () => bubbleWin?.hide())
+ipcMain.on("bubble:contextMenu", showBubbleContextMenu)
+ipcMain.on("provider:open", (_e, which) => openProvider(which))
+ipcMain.on("app:quit", () => app.quit())
+ipcMain.on("settings:login", (_e, enabled) => {
+  const openAtLogin = Boolean(enabled)
+  writeState({ startAtLogin: openAtLogin })
+  app.setLoginItemSettings({ openAtLogin })
+})
+ipcMain.on("settings:alwaysOnTop", (_e, enabled) => {
+  alwaysOnTop = Boolean(enabled)
+  writeState({ alwaysOnTop })
+  bubbleWin?.setAlwaysOnTop(alwaysOnTop, "screen-saver")
+  panelWin?.setAlwaysOnTop(alwaysOnTop, "screen-saver")
+})
+ipcMain.on("settings:closeOnBlur", (_e, enabled) => {
+  closeOnBlur = Boolean(enabled)
+  writeState({ closeOnBlur })
+})
+ipcMain.on("settings:showBubbleOnStartup", (_e, enabled) => {
+  showBubbleOnStartup = Boolean(enabled)
+  writeState({ showBubbleOnStartup })
+  if (showBubbleOnStartup) bubbleWin?.show()
+  else bubbleWin?.hide()
+})
+ipcMain.on("settings:rememberPosition", (_e, enabled) => {
+  rememberPosition = Boolean(enabled)
+  writeState({ rememberPosition })
+})
+ipcMain.on("settings:snapToEdge", (_e, enabled) => {
+  snapToEdge = Boolean(enabled)
+  writeState({ snapToEdge })
+})
+ipcMain.on("settings:performance", (_e, mode) => setPerformanceMode(mode))
+ipcMain.on("settings:appearance", (_e, data) => {
+  const patch = {}
+  if (data?.theme) {
+    patch.theme = data.theme
+    nativeTheme.themeSource = data.theme.toLowerCase()
+  }
+  if (data?.bubbleSize) patch.bubbleSize = data.bubbleSize
+  writeState(patch)
+  bubbleWin?.webContents.send("settings:appearance", data)
+  panelWin?.webContents.send("settings:appearance", data)
+})
 ipcMain.handle("settings:get", () => {
-  const state = readState();
+  const state = readState()
   return {
     startAtLogin: state.startAtLogin ?? app.getLoginItemSettings().openAtLogin,
     showBubbleOnStartup: state.showBubbleOnStartup !== false,
@@ -504,76 +629,137 @@ ipcMain.handle("settings:get", () => {
     theme: state.theme || "System",
     bubbleSize: state.bubbleSize || "Medium",
     panelSize: state.panelSize || null,
-  };
-});
+  }
+})
 ipcMain.on("notifications:unread", (_e, provider, count) => {
-  if (!Object.hasOwn(unreadCounts, provider)) return;
-  const next = Number.isFinite(Number(count)) ? Math.max(0, Math.min(999, Math.floor(Number(count)))) : 0;
-  if (unreadCounts[provider] === next) return;
-  unreadCounts[provider] = next;
-  panelWin?.webContents.send("notifications:unread", unreadCounts);
-  bubbleWin?.webContents.send("notifications:unread", unreadCounts);
-});
+  if (!Object.hasOwn(unreadCounts, provider)) return
+  const next = Number.isFinite(Number(count))
+    ? Math.max(0, Math.min(999, Math.floor(Number(count))))
+    : 0
+  if (unreadCounts[provider] === next) return
+  unreadCounts[provider] = next
+  panelWin?.webContents.send("notifications:unread", unreadCounts)
+  bubbleWin?.webContents.send("notifications:unread", unreadCounts)
+})
 ipcMain.on("session:clear", async (_e, provider) => {
-  if (!["messenger", "zalo", "cache"].includes(provider)) return;
+  if (!["messenger", "zalo", "custom", "cache"].includes(provider)) return
   if (provider === "cache") {
     await Promise.all([
       session.fromPartition("persist:messenger").clearCache(),
       session.fromPartition("persist:zalo").clearCache(),
-    ]).catch(() => {});
+      session.fromPartition("persist:custom").clearCache(),
+    ]).catch(() => {})
   } else {
-    await session.fromPartition(`persist:${provider}`).clearStorageData().catch(() => {});
-    panelWin?.webContents.send("provider:reload", provider);
+    await session
+      .fromPartition(`persist:${provider}`)
+      .clearStorageData()
+      .catch(() => {})
+    panelWin?.webContents.send("provider:reload", provider)
   }
-});
-ipcMain.on("session:openStorage", () => shell.openPath(app.getPath("userData")));
-ipcMain.on("developer:copyPhone", () => clipboard.writeText("0866007219"));
-ipcMain.handle("app:getVersion", () => app.getVersion());
-ipcMain.handle("update:getInfo", () => updateInfo);
-ipcMain.handle("update:check", () => checkAppUpdate());
+})
+ipcMain.on("session:openStorage", () => shell.openPath(app.getPath("userData")))
+ipcMain.on("developer:copyPhone", () => clipboard.writeText("0866007219"))
+ipcMain.handle("system:getMemory", async () => {
+  try {
+    const metrics = app.getAppMetrics()
+    const totalBytes = metrics.reduce(
+      (acc, m) => acc + (m.memory?.workingSetSize || 0) * 1024,
+      0,
+    )
+    return {
+      totalMB: Math.max(1, Math.round(totalBytes / (1024 * 1024))),
+      metrics: metrics.map((m) => ({
+        type: m.type,
+        mb: Math.round(
+          ((m.memory?.workingSetSize || 0) * 1024) / (1024 * 1024),
+        ),
+      })),
+    }
+  } catch {
+    const mem = process.memoryUsage()
+    return {
+      totalMB: Math.round(mem.rss / (1024 * 1024)),
+    }
+  }
+})
+ipcMain.handle("system:trimMemory", async () => {
+  try {
+    await Promise.all([
+      session.fromPartition("persist:messenger").clearCache(),
+      session.fromPartition("persist:zalo").clearCache(),
+      session.fromPartition("persist:custom").clearCache(),
+    ]).catch(() => {})
+  } catch {}
+  return true
+})
+ipcMain.handle("app:getVersion", () => app.getVersion())
+ipcMain.handle("update:getInfo", () => updateInfo)
+ipcMain.handle("update:check", () => checkAppUpdate())
 ipcMain.handle("update:openDownload", async () => {
-  const url = updateInfo.downloadUrl || updateInfo.releaseUrl;
-  if (!isTrustedReleaseUrl(url)) throw new Error("No trusted update download is available");
-  await shell.openExternal(url);
-});
+  const url = updateInfo.downloadUrl || updateInfo.releaseUrl
+  if (!isTrustedReleaseUrl(url))
+    throw new Error("No trusted update download is available")
+  await shell.openExternal(url)
+})
 
 app.whenReady().then(() => {
-  if (!hasSingleInstanceLock) return;
-  ["persist:messenger", "persist:zalo"].forEach((partition) => {
-    const ses = session.fromPartition(partition);
-    ses.setPermissionRequestHandler((_webContents, permission, callback) => {
-      callback(permission === "notifications");
-    });
-    ses.setPermissionCheckHandler((_webContents, permission) => {
-      return permission === "notifications";
-    });
-  });
+  if (!hasSingleInstanceLock) return
+  const AD_BLOCK_URLS = [
+    "*://*.doubleclick.net/*",
+    "*://*.googleads.g.doubleclick.net/*",
+    "*://*.googlesyndication.com/*",
+    "*://*.google-analytics.com/*",
+    "*://*.youtube.com/pagead/*",
+    "*://*.youtube.com/api/stats/ads*",
+    "*://*.youtube.com/ptracking*",
+    "*://spclient.wg.spotify.com/ads/*",
+    "*://spclient.wg.spotify.com/ad-logic/*",
+  ]
+  ;["persist:messenger", "persist:zalo", "persist:custom"].forEach(
+    (partition) => {
+      const ses = session.fromPartition(partition)
+      ses.setPermissionRequestHandler((_webContents, permission, callback) => {
+        callback(permission === "notifications" || permission === "media")
+      })
+      ses.setPermissionCheckHandler((_webContents, permission) => {
+        return permission === "notifications" || permission === "media"
+      })
+      try {
+        ses.webRequest.onBeforeRequest(
+          { urls: AD_BLOCK_URLS },
+          (_details, callback) => {
+            callback({ cancel: true })
+          },
+        )
+      } catch {}
+    },
+  )
 
-  createBubble();
-  createPanel();
-  buildTray();
+  createBubble()
+  createPanel()
+  buildTray()
   if (app.dock) {
     try {
-      app.dock.setIcon(APP_ICON_PATH);
+      app.dock.setIcon(APP_ICON_PATH)
     } catch {}
   }
-  registerShortcuts();
-  setTimeout(() => void checkAppUpdate(), 5000);
-  screen.on("display-removed", restoreBubbleIfOffscreen);
+  registerShortcuts()
+  setTimeout(() => void checkAppUpdate(), 5000)
+  screen.on("display-removed", restoreBubbleIfOffscreen)
   screen.on("display-metrics-changed", () => {
-    restoreBubbleIfOffscreen();
-    if (panelWin?.isVisible()) positionPanelNearBubble();
-  });
+    restoreBubbleIfOffscreen()
+    if (panelWin?.isVisible()) positionPanelNearBubble()
+  })
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createBubble();
-  });
-});
+    if (BrowserWindow.getAllWindows().length === 0) createBubble()
+  })
+})
 
 app.on("second-instance", () => {
-  bubbleWin?.show();
-  bubbleWin?.focus();
-});
+  bubbleWin?.show()
+  bubbleWin?.focus()
+})
 
 // Keep running in tray when all windows are closed.
-app.on("window-all-closed", () => {});
-app.on("will-quit", () => globalShortcut.unregisterAll());
+app.on("window-all-closed", () => {})
+app.on("will-quit", () => globalShortcut.unregisterAll())

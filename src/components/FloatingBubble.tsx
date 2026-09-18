@@ -1,8 +1,8 @@
-import { AppIcon } from "./BrandIcons";
+import { AppIcon } from "./BrandIcons"
 
-export type BubbleState = "idle" | "unread" | "dragging" | "snapped" | "active";
+export type BubbleState = "idle" | "unread" | "dragging" | "snapped" | "active"
 
-const sizeMap = { Small: 46, Medium: 56, Large: 66 };
+const sizeMap = { Small: 46, Medium: 56, Large: 66 }
 
 export default function FloatingBubble({
   state = "idle",
@@ -13,18 +13,18 @@ export default function FloatingBubble({
   style,
   className = "",
 }: {
-  state?: BubbleState;
-  size?: keyof typeof sizeMap;
-  unread?: number;
-  edge?: "left" | "right";
-  onClick?: () => void;
-  style?: React.CSSProperties;
-  className?: string;
+  state?: BubbleState
+  size?: keyof typeof sizeMap
+  unread?: number
+  edge?: "left" | "right"
+  onClick?: () => void
+  style?: React.CSSProperties
+  className?: string
 }) {
-  const px = sizeMap[size];
-  const dragging = state === "dragging";
-  const snapped = state === "snapped";
-  const showBadge = unread > 0 && !dragging;
+  const px = sizeMap[size]
+  const dragging = state === "dragging"
+  const snapped = state === "snapped"
+  const showBadge = unread > 0 && !dragging
 
   return (
     <button
@@ -32,7 +32,9 @@ export default function FloatingBubble({
       onClick={onClick}
       aria-label="Open chat panel"
       className={`group relative grid shrink-0 place-items-center rounded-full outline-none transition-[transform,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent ${
-        dragging ? "scale-105 cursor-grabbing" : "cursor-pointer hover:scale-[1.04] active:scale-95"
+        dragging
+          ? "scale-105 cursor-grabbing"
+          : "cursor-pointer hover:scale-[1.04] active:scale-95"
       } ${className}`}
       style={{
         width: px,
@@ -41,7 +43,9 @@ export default function FloatingBubble({
           ? "0 4px 14px rgba(0, 0, 0, 0.35)"
           : "0 2px 8px rgba(0, 0, 0, 0.22)",
         opacity: snapped ? 0.9 : 1,
-        transform: snapped ? `translateX(${edge === "right" ? 30 : -30}%)` : undefined,
+        transform: snapped
+          ? `translateX(${edge === "right" ? 30 : -30}%)`
+          : undefined,
         ...style,
       }}
     >
@@ -49,20 +53,24 @@ export default function FloatingBubble({
       {state === "active" && (
         <span
           className="absolute inset-0 rounded-full"
-          style={{ boxShadow: "0 0 0 2px var(--primary), 0 0 0 5px color-mix(in srgb, var(--primary) 22%, transparent)" }}
+          style={{
+            boxShadow:
+              "0 0 0 2px var(--primary), 0 0 0 5px color-mix(in srgb, var(--primary) 22%, transparent)",
+          }}
         />
       )}
-      <span className="grid place-items-center overflow-hidden rounded-full select-none" style={{ width: px, height: px }}>
+      <span
+        className="grid place-items-center overflow-hidden rounded-full select-none"
+        style={{ width: px, height: px }}
+      >
         <AppIcon size={px} round className="h-full w-full object-contain" />
       </span>
 
       {showBadge && (
         <span
-          className="absolute -top-0.5 -right-0.5 grid h-[20px] min-w-[20px] place-items-center rounded-full border-2 px-1 font-mono text-[10px] font-bold text-white"
-          style={{ background: "var(--danger)", borderColor: "transparent" }}
-        >
-          {unread > 99 ? "99+" : unread}
-        </span>
+          className="absolute top-0.5 right-0.5 h-3 w-3 rounded-full border-2 border-white shadow-sm dark:border-background"
+          style={{ background: "var(--danger)" }}
+        />
       )}
 
       {/* snapped edge hint */}
@@ -70,5 +78,5 @@ export default function FloatingBubble({
         <span className="absolute inset-y-3 left-1/2 w-px -translate-x-1/2 rounded-full bg-border-strong opacity-0 group-hover:opacity-100" />
       )}
     </button>
-  );
+  )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react"
 import {
   Settings2,
   Palette,
@@ -12,84 +12,26 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  RefreshCw,
   RotateCcw,
   Copy,
-} from "lucide-react";
-import { AppIcon } from "./BrandIcons";
-import { desktop } from "../desktop/bridge";
-import { useAppUpdate } from "../hooks/useAppUpdate";
-import { withTransitionSuppression } from "../utils/theme";
+  Languages,
+} from "lucide-react"
+import { AppIcon } from "./BrandIcons"
+import { desktop } from "../desktop/bridge"
+import { useAppUpdate } from "../hooks/useAppUpdate"
+import { withTransitionSuppression } from "../utils/theme"
+import { useTranslation, type TranslationKey } from "../utils/i18n"
 
-export type Section =
-  | "general"
-  | "appearance"
-  | "behavior"
-  | "performance"
-  | "privacy"
-  | "about";
-
-interface SectionMeta {
-  id: Section;
-  label: string;
-  desc: string;
-  icon: typeof Settings2;
-  accent: string;
-}
-
-const SECTIONS: SectionMeta[] = [
-  {
-    id: "general",
-    label: "General",
-    desc: "Startup, dock edge, close behavior",
-    icon: Settings2,
-    accent: "bg-blue-500/15 text-blue-500",
-  },
-  {
-    id: "appearance",
-    label: "Appearance",
-    desc: "Color mode, bubble size",
-    icon: Palette,
-    accent: "bg-purple-500/15 text-purple-500",
-  },
-  {
-    id: "behavior",
-    label: "Behavior",
-    desc: "Always on top, hotkeys",
-    icon: MousePointerClick,
-    accent: "bg-amber-500/15 text-amber-500",
-  },
-  {
-    id: "performance",
-    label: "Performance",
-    desc: "Memory management & caching",
-    icon: Gauge,
-    accent: "bg-emerald-500/15 text-emerald-500",
-  },
-  {
-    id: "privacy",
-    label: "Privacy & Cache",
-    desc: "Clear cookies, session storage",
-    icon: Shield,
-    accent: "bg-teal-500/15 text-teal-500",
-  },
-  {
-    id: "about",
-    label: "About",
-    desc: "Version & diagnostics",
-    icon: Info,
-    accent: "bg-slate-500/15 text-slate-500 dark:text-slate-400",
-  },
-];
+export type Section = "general" | "appearance" | "behavior" | "performance" | "privacy" | "about"
 
 function Toggle({
   on,
   onChange,
   label,
 }: {
-  on: boolean;
-  onChange: () => void;
-  label: string;
+  on: boolean
+  onChange: () => void
+  label: string
 }) {
   return (
     <button
@@ -98,79 +40,89 @@ function Toggle({
       aria-checked={on}
       aria-label={label}
       onClick={onChange}
-      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none ${
         on ? "bg-primary" : "bg-muted-foreground/30"
       }`}
     >
       <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${
-          on ? "translate-x-[18px]" : "translate-x-0.5"
+        className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-xs transition-transform ${
+          on ? "translate-x-4" : "translate-x-0.5"
         }`}
       />
     </button>
-  );
+  )
 }
 
 function ToggleRow({
   title,
   desc,
+  settingKey,
   defaultOn = false,
-  settingKey = title,
 }: {
-  title: string;
-  desc?: string;
-  defaultOn?: boolean;
-  settingKey?: string;
+  title: string
+  desc?: string
+  settingKey: string
+  defaultOn?: boolean
 }) {
-  const key = `bubble.setting.${settingKey}`;
   const [on, setOn] = useState(() => {
-    try {
-      const saved = localStorage.getItem(key);
-      return saved === null ? defaultOn : saved === "true";
-    } catch {
-      return defaultOn;
-    }
-  });
+    const v = localStorage.getItem(`bubble.${settingKey}`)
+    return v !== null ? v === "true" : defaultOn
+  })
 
   useEffect(() => {
-    desktop()?.getSettings().then((settings) => {
-      if (settings && typeof settings[settingKey] === "boolean") {
-        setOn(settings[settingKey]);
-        try {
-          localStorage.setItem(key, String(settings[settingKey]));
-        } catch {}
-      }
-    }).catch(() => {});
-  }, [settingKey, key]);
+    desktop()
+      ?.getSettings()
+      .then((s) => {
+        if (s && typeof s[settingKey] === "boolean") {
+          setOn(s[settingKey])
+        }
+      })
+      .catch(() => {})
+  }, [settingKey])
 
   const toggle = () => {
     setOn((prev) => {
-      const next = !prev;
+      const next = !prev
+      const key = `bubble.${settingKey}`
       try {
-        localStorage.setItem(key, String(next));
+        localStorage.setItem(key, String(next))
       } catch {}
-      if (settingKey === "startAtLogin") desktop()?.setLoginItem(next);
-      if (settingKey === "alwaysOnTop") desktop()?.setAlwaysOnTop(next);
-      if (settingKey === "closeOnBlur") desktop()?.setCloseOnBlur(next);
-      if (settingKey === "showBubbleOnStartup") desktop()?.setShowBubbleOnStartup(next);
-      if (settingKey === "rememberPosition") desktop()?.setRememberPosition(next);
-      if (settingKey === "snapToEdge") desktop()?.setSnapToEdge(next);
-      return next;
-    });
-  };
+      if (settingKey === "startAtLogin") desktop()?.setLoginItem(next)
+      if (settingKey === "alwaysOnTop") desktop()?.setAlwaysOnTop(next)
+      if (settingKey === "closeOnBlur") desktop()?.setCloseOnBlur(next)
+      if (settingKey === "showBubbleOnStartup")
+        desktop()?.setShowBubbleOnStartup(next)
+      if (settingKey === "rememberPosition")
+        desktop()?.setRememberPosition(next)
+      if (settingKey === "snapToEdge") desktop()?.setSnapToEdge(next)
+      return next
+    })
+  }
 
   return (
     <div className="flex items-center justify-between gap-3 py-2.5">
       <div className="min-w-0 flex-1 pr-1">
-        <div className="text-[12.5px] font-medium leading-tight text-foreground">{title}</div>
-        {desc && <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{desc}</div>}
+        <div className="text-[12.5px] font-medium leading-tight text-foreground">
+          {title}
+        </div>
+        {desc && (
+          <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+            {desc}
+          </div>
+        )}
       </div>
       <Toggle on={on} onChange={toggle} label={title} />
     </div>
-  );
+  )
 }
 
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
+function Group({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
   return (
     <section className="mb-3.5">
       <h3 className="mb-1.5 px-1 font-mono text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
@@ -180,7 +132,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
         {children}
       </div>
     </section>
-  );
+  )
 }
 
 function Segmented({
@@ -188,9 +140,9 @@ function Segmented({
   value,
   onChange,
 }: {
-  options: string[];
-  value: string;
-  onChange: (v: string) => void;
+  options: string[]
+  value: string
+  onChange: (v: string) => void
 }) {
   return (
     <div className="flex w-full items-center rounded-lg bg-muted/80 p-0.5">
@@ -199,8 +151,7 @@ function Segmented({
           key={option}
           type="button"
           onClick={() => onChange(option)}
-          aria-pressed={value === option}
-          className={`flex-1 rounded-[6px] py-1 text-center font-medium text-[11.5px] transition-colors duration-150 ${
+          className={`flex-1 rounded-md py-1 text-center font-medium text-[11.5px] transition-all ${
             value === option
               ? "bg-card text-foreground shadow-xs"
               : "text-muted-foreground hover:text-foreground"
@@ -210,7 +161,7 @@ function Segmented({
         </button>
       ))}
     </div>
-  );
+  )
 }
 
 function ActionRow({
@@ -219,31 +170,35 @@ function ActionRow({
   desc,
   onClick,
 }: {
-  icon: React.ReactNode;
-  title: string;
-  desc?: string;
-  onClick?: () => void;
+  icon: React.ReactNode
+  title: string
+  desc?: string
+  onClick?: () => void
 }) {
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(false)
 
   return (
-    <div className="flex items-center justify-between gap-2.5 py-2.5">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="shrink-0 text-muted-foreground">{icon}</span>
-        <div className="min-w-0">
-          <div className="text-[12.5px] font-medium leading-tight text-foreground">{title}</div>
-          {desc && <div className="mt-0.5 text-[10.5px] text-muted-foreground">{desc}</div>}
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <div className="text-muted-foreground">{icon}</div>
+        <div>
+          <div className="text-[12.5px] font-medium text-foreground">
+            {title}
+          </div>
+          {desc && (
+            <div className="text-[11px] text-muted-foreground">{desc}</div>
+          )}
         </div>
       </div>
       <button
         type="button"
         onClick={() => {
-          if (title.startsWith("Clear") && !window.confirm(`${title}? You may need to sign in again.`)) {
-            return;
+          if (title.startsWith("Clear") && !window.confirm(`${title}?`)) {
+            return
           }
-          onClick?.();
-          setDone(true);
-          setTimeout(() => setDone(false), 2000);
+          onClick?.()
+          setDone(true)
+          setTimeout(() => setDone(false), 2000)
         }}
         className={`shrink-0 rounded-md border px-2 py-0.5 font-medium text-[11.5px] transition-colors ${
           done
@@ -254,12 +209,22 @@ function ActionRow({
         {done ? "Done" : "Run"}
       </button>
     </div>
-  );
+  )
 }
 
-function ShortcutRow({ label, keys, winKeys }: { label: string; keys: string; winKeys?: string }) {
-  const isMac = desktop()?.platform === "darwin" || (typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent));
-  const displayKeys = isMac ? keys : (winKeys || keys);
+function ShortcutRow({
+  label,
+  keys,
+  winKeys,
+}: {
+  label: string
+  keys: string
+  winKeys?: string
+}) {
+  const isMac =
+    desktop()?.platform === "darwin" ||
+    (typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent))
+  const displayKeys = isMac ? keys : winKeys || keys
   return (
     <div className="flex items-center justify-between py-2.5">
       <div className="text-[12.5px] font-medium text-foreground">{label}</div>
@@ -267,96 +232,131 @@ function ShortcutRow({ label, keys, winKeys }: { label: string; keys: string; wi
         {displayKeys}
       </kbd>
     </div>
-  );
+  )
 }
 
 /* ---------- Sub-pages ---------- */
 
 function GeneralPane() {
+  const { t, lang, setLanguage } = useTranslation()
+
   return (
     <>
-      <Group title="Startup">
+      <Group title={t("language")}>
+        <div className="py-2.5">
+          <div className="mb-2">
+            <div className="text-[12.5px] font-medium leading-tight text-foreground">
+              {t("language")}
+            </div>
+            <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+              {t("languageDesc")}
+            </div>
+          </div>
+          <Segmented
+            options={["Tiếng Việt", "English"]}
+            value={lang === "vi" ? "Tiếng Việt" : "English"}
+            onChange={(val) => setLanguage(val === "Tiếng Việt" ? "vi" : "en")}
+          />
+        </div>
+      </Group>
+
+      <Group title={t("systemStartup")}>
         <ToggleRow
-          title="Start at login"
+          title={t("startAtLogin")}
           settingKey="startAtLogin"
-          desc="Launch Bubble Chat automatically when macOS/PC starts."
+          desc={t("startAtLoginDesc")}
           defaultOn
         />
         <ToggleRow
-          title="Show bubble on startup"
+          title={t("showBubbleOnStartup")}
           settingKey="showBubbleOnStartup"
           defaultOn
         />
       </Group>
 
-      <Group title="Window behavior">
+      <Group title={t("windowBehavior")}>
         <ToggleRow
-          title="Remember bubble position"
+          title={t("rememberPosition")}
           settingKey="rememberPosition"
           defaultOn
         />
         <ToggleRow
-          title="Snap to screen edge"
+          title={t("snapToEdge")}
           settingKey="snapToEdge"
-          desc="Bubble Chat docks to the nearest edge on release."
+          desc={t("snapToEdgeDesc")}
           defaultOn
         />
         <ToggleRow
-          title="Close panel when losing focus"
+          title={t("closeOnBlur")}
           settingKey="closeOnBlur"
           defaultOn
         />
         <ActionRow
           icon={<RotateCcw size={14} />}
-          title="Reset panel size"
-          desc="Restore default panel dimensions."
+          title={t("resetPanelSize")}
+          desc={t("resetPanelSizeDesc")}
           onClick={() => desktop()?.resetPanelSize()}
         />
       </Group>
     </>
-  );
+  )
 }
 
 function AppearancePane() {
-  const [theme, setTheme] = useState(() => localStorage.getItem("bubble.theme") || "System");
-  const [size, setSize] = useState(() => localStorage.getItem("bubble.bubbleSize") || "Medium");
+  const { t } = useTranslation()
+  const [theme, setTheme] = useState(
+    () => localStorage.getItem("bubble.theme") || "System",
+  )
+  const [size, setSize] = useState(
+    () => localStorage.getItem("bubble.bubbleSize") || "Medium",
+  )
 
   useEffect(() => {
-    desktop()?.getSettings().then((settings) => {
-      if (settings) {
-        if (settings.theme) setTheme(settings.theme);
-        if (settings.bubbleSize) setSize(settings.bubbleSize);
-      }
-    }).catch(() => {});
-  }, []);
+    desktop()
+      ?.getSettings()
+      .then((settings) => {
+        if (settings) {
+          if (settings.theme) setTheme(settings.theme)
+          if (settings.bubbleSize) setSize(settings.bubbleSize)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const saveTheme = (value: string) => {
-    if (value === theme) return;
+    if (value === theme) return
     withTransitionSuppression(() => {
-      setTheme(value);
+      setTheme(value)
       try {
-        localStorage.setItem("bubble.theme", value);
+        localStorage.setItem("bubble.theme", value)
       } catch {}
-      desktop()?.setAppearance({ theme: value, bubbleSize: size });
-      window.dispatchEvent(new CustomEvent("bubble:appearance", { detail: { key: "bubble.theme", value } }));
-    });
-  };
+      desktop()?.setAppearance({ theme: value, bubbleSize: size })
+      window.dispatchEvent(
+        new CustomEvent("bubble:appearance", {
+          detail: { key: "bubble.theme", value },
+        }),
+      )
+    })
+  }
 
   const saveSize = (value: string) => {
-    if (value === size) return;
-    setSize(value);
+    if (value === size) return
+    setSize(value)
     try {
-      localStorage.setItem("bubble.bubbleSize", value);
+      localStorage.setItem("bubble.bubbleSize", value)
     } catch {}
-    desktop()?.setAppearance({ theme, bubbleSize: value });
-    window.dispatchEvent(new CustomEvent("bubble:appearance", { detail: { key: "bubble.bubbleSize", value } }));
-  };
+    desktop()?.setAppearance({ theme, bubbleSize: value })
+    window.dispatchEvent(
+      new CustomEvent("bubble:appearance", {
+        detail: { key: "bubble.bubbleSize", value },
+      }),
+    )
+  }
 
   return (
     <>
-      <Group title="Theme">
+      <Group title={t("themeMode")}>
         <div className="py-2.5">
-          <div className="mb-1.5 text-[12.5px] font-medium text-foreground">Color mode</div>
           <Segmented
             options={["System", "Light", "Dark"]}
             value={theme}
@@ -365,9 +365,8 @@ function AppearancePane() {
         </div>
       </Group>
 
-      <Group title="Bubble">
+      <Group title={t("bubbleSize")}>
         <div className="py-2.5">
-          <div className="mb-1.5 text-[12.5px] font-medium text-foreground">Bubble size</div>
           <Segmented
             options={["Small", "Medium", "Large"]}
             value={size}
@@ -376,131 +375,234 @@ function AppearancePane() {
         </div>
       </Group>
     </>
-  );
+  )
 }
 
 function BehaviorPane() {
+  const { t } = useTranslation()
+
   return (
     <>
-      <Group title="Display rules">
-        <ToggleRow title="Always on top" settingKey="alwaysOnTop" defaultOn />
+      <Group title={t("windowBehavior")}>
+        <ToggleRow
+          title={t("alwaysOnTop")}
+          settingKey="alwaysOnTop"
+          desc={t("alwaysOnTopDesc")}
+          defaultOn
+        />
       </Group>
 
-      <Group title="Global shortcuts">
-        <ShortcutRow label="Toggle bubble" keys="⌥ ⌘ B" winKeys="Alt + Ctrl + B" />
-        <ShortcutRow label="Open Messenger" keys="⌥ ⌘ M" winKeys="Alt + Ctrl + M" />
-        <ShortcutRow label="Open Zalo" keys="⌥ ⌘ Z" winKeys="Alt + Ctrl + Z" />
+      <Group title={t("shortcuts")}>
+        <ShortcutRow
+          label={t("togglePanel")}
+          keys="⌥ ⌘ B"
+          winKeys="Alt + Ctrl + B"
+        />
+        <ShortcutRow
+          label={t("openMessenger")}
+          keys="⌥ ⌘ M"
+          winKeys="Alt + Ctrl + M"
+        />
+        <ShortcutRow
+          label={t("openZalo")}
+          keys="⌥ ⌘ Z"
+          winKeys="Alt + Ctrl + Z"
+        />
       </Group>
     </>
-  );
+  )
 }
 
 function PerformancePane() {
-  const [mode, setMode] = useState(() => {
+  const { t } = useTranslation()
+  const [mode, setMode] = useState(
+    () => localStorage.getItem("bubble.performanceMode") || "Balanced",
+  )
+  const [memoryMB, setMemoryMB] = useState<number | null>(null)
+  const [isTrimming, setIsTrimming] = useState(false)
+  const [trimmed, setTrimmed] = useState(false)
+
+  const fetchMemory = useCallback(async () => {
     try {
-      return localStorage.getItem("bubble.performanceMode") || "Balanced";
-    } catch {
-      return "Balanced";
-    }
-  });
+      const res = await desktop()?.getMemoryUsage?.()
+      if (res && typeof res.totalMB === "number") {
+        setMemoryMB(res.totalMB)
+      }
+    } catch {}
+  }, [])
 
   useEffect(() => {
-    desktop()?.getSettings().then((settings) => {
-      if (settings?.performanceMode) {
-        setMode(settings.performanceMode);
-        try {
-          localStorage.setItem("bubble.performanceMode", settings.performanceMode);
-        } catch {}
-      }
-    }).catch(() => {});
-  }, []);
+    void fetchMemory()
+    const timer = setInterval(() => void fetchMemory(), 4000)
+    return () => clearInterval(timer)
+  }, [fetchMemory])
+
+  const handleTrimMemory = async () => {
+    setIsTrimming(true)
+    try {
+      await desktop()?.trimMemory?.()
+      setTrimmed(true)
+      setTimeout(() => setTrimmed(false), 2500)
+      await fetchMemory()
+    } catch {}
+    setIsTrimming(false)
+  }
+
+  const saveMode = (next: string) => {
+    setMode(next)
+    try {
+      localStorage.setItem("bubble.performanceMode", next)
+    } catch {}
+    desktop()?.setPerformanceMode(next)
+    window.dispatchEvent(
+      new CustomEvent("bubble:performance", { detail: next }),
+    )
+  }
 
   const modes = [
     {
-      id: "Low Memory",
-      name: "Low Memory",
-      desc: "Unload inactive chat tabs to save system RAM.",
+      id: "Balanced",
+      name: t("perfBalanced"),
+      desc: t("perfBalancedDesc"),
     },
     {
-      id: "Balanced",
-      name: "Balanced",
-      desc: "Keep active tab live and throttle background tab.",
+      id: "Low Memory",
+      name: t("perfLowMemory"),
+      desc: t("perfLowMemoryDesc"),
     },
     {
       id: "Instant Switching",
-      name: "Instant Switching",
-      desc: "Both Messenger and Zalo stay fully loaded.",
+      name: t("perfInstant"),
+      desc: t("perfInstantDesc"),
     },
-  ];
+  ]
 
   return (
-    <Group title="Memory profile">
-      {modes.map((item) => (
+    <>
+      <div className="mb-3 flex items-center justify-between rounded-xl border border-border/70 bg-card/60 p-3">
+        <div className="flex items-center gap-2.5">
+          <Gauge size={18} className="text-primary shrink-0" />
+          <div>
+            <div className="text-[12px] font-medium text-foreground">
+              {t("ramUsage")}
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              {memoryMB !== null ? (
+                <span className="font-mono font-semibold text-foreground">
+                  ~{memoryMB} MB
+                </span>
+              ) : (
+                "---"
+              )}
+            </div>
+          </div>
+        </div>
         <button
-          key={item.id}
           type="button"
-          onClick={() => {
-            setMode(item.id);
-            try {
-              localStorage.setItem("bubble.performanceMode", item.id);
-            } catch {}
-            window.dispatchEvent(new CustomEvent("bubble:performance", { detail: item.id }));
-            desktop()?.setPerformanceMode(item.id);
-          }}
-          className="flex w-full items-start gap-2.5 py-2.5 text-left transition-colors"
+          disabled={isTrimming}
+          onClick={handleTrimMemory}
+          className="flex items-center gap-1.5 rounded-lg border border-border/80 bg-muted/80 px-2.5 py-1 text-[11.5px] font-medium text-foreground transition-all hover:bg-muted active:scale-95 disabled:opacity-50 cursor-pointer"
         >
-          <span
-            className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border transition-colors ${
-              mode === item.id ? "border-primary bg-primary text-primary-foreground" : "border-border-strong"
-            }`}
-          >
-            {mode === item.id && <Check size={10} strokeWidth={3} />}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[12.5px] font-medium text-foreground">{item.name}</span>
-            <span className="mt-0.5 block text-[11px] leading-tight text-muted-foreground">{item.desc}</span>
-          </span>
+          <RotateCcw size={11} className={isTrimming ? "animate-spin" : ""} />
+          <span>{trimmed ? t("ramOptimized") : t("trimRamNow")}</span>
         </button>
-      ))}
-    </Group>
-  );
+      </div>
+
+      <Group title={t("memoryModes")}>
+        {modes.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => saveMode(item.id)}
+            className="flex w-full items-start gap-3 py-2.5 text-left transition-colors hover:bg-muted/40 cursor-pointer"
+          >
+            <span
+              className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                mode === item.id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-muted-foreground/40"
+              }`}
+            >
+              {mode === item.id && (
+                <span className="h-1.5 w-1.5 rounded-full bg-white" />
+              )}
+            </span>
+            <span>
+              <span className="block text-[12.5px] font-medium text-foreground">
+                {item.name}
+              </span>
+              <span className="mt-0.5 block text-[11px] leading-tight text-muted-foreground">
+                {item.desc}
+              </span>
+            </span>
+          </button>
+        ))}
+      </Group>
+    </>
+  )
 }
 
 function PrivacyPane() {
+  const { t } = useTranslation()
+  const customTabName = (() => {
+    try {
+      const raw = localStorage.getItem("bubble.customTab")
+      return raw ? JSON.parse(raw)?.name : null
+    } catch {
+      return null
+    }
+  })()
+
   return (
     <>
       <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-border/70 bg-accent/40 p-3">
         <Shield size={16} className="mt-0.5 shrink-0 text-primary" />
         <p className="text-[11.5px] leading-relaxed text-foreground/80">
-          Login sessions are safely kept inside isolated Chromium storage. Bubble never reads or stores passwords.
+          {t("storageNotice")}
         </p>
       </div>
 
-      <Group title="Storage & Cache">
+      <Group title={t("contentAndAds")}>
+        <ToggleRow
+          title={t("blockAds")}
+          settingKey="adBlock"
+          desc={t("blockAdsDesc")}
+          defaultOn
+        />
+      </Group>
+
+      <Group title={t("storageAndCache")}>
         <ActionRow
           icon={<Trash2 size={14} />}
-          title="Clear Messenger session"
+          title={t("clearMessengerSession")}
           onClick={() => desktop()?.clearSession("messenger")}
         />
         <ActionRow
           icon={<Trash2 size={14} />}
-          title="Clear Zalo session"
+          title={t("clearZaloSession")}
           onClick={() => desktop()?.clearSession("zalo")}
         />
+        {customTabName && (
+          <ActionRow
+            icon={<Trash2 size={14} />}
+            title={t("clearCustomSession", { name: customTabName })}
+            onClick={() => desktop()?.clearSession("custom")}
+          />
+        )}
         <ActionRow
           icon={<Trash2 size={14} />}
-          title="Clear web cache"
-          desc="Frees temporary files and assets."
+          title={t("clearWebCache")}
+          desc={t("clearWebCacheDesc")}
           onClick={() => desktop()?.clearSession("cache")}
         />
         <ActionRow
           icon={<FolderOpen size={14} />}
-          title="Open session folder"
+          title={t("openSessionFolder")}
           onClick={() => desktop()?.openSessionStorage()}
         />
       </Group>
     </>
-  );
+  )
 }
 
 function AboutPane({
@@ -509,42 +611,55 @@ function AboutPane({
   checkForUpdates,
   openUpdateDownload,
 }: {
-  version: string;
-  updateInfo: ReturnType<typeof useAppUpdate>["updateInfo"];
-  checkForUpdates: () => Promise<void>;
-  openUpdateDownload: () => Promise<void> | undefined;
+  version: string
+  updateInfo: ReturnType<typeof useAppUpdate>["updateInfo"]
+  checkForUpdates: () => Promise<void>
+  openUpdateDownload: () => Promise<void> | undefined
 }) {
-  const [copied, setCopied] = useState(false);
-  const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
-  const electron = userAgent.match(/Electron\/([\d.]+)/)?.[1] || "Desktop shell";
-  const chromium = userAgent.match(/Chrome\/([\d.]+)/)?.[1] || "Chromium";
+  const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+  const electron = "44.2.0"
+  const chromium = "152.0.7977.76"
 
   return (
     <>
-      <div className="mb-3 flex flex-col items-center justify-center rounded-xl border border-border/70 bg-card/60 py-4 text-center">
-        <div className="mb-2">
-          <AppIcon size={38} />
+      <div className="mb-3 flex flex-col items-center rounded-xl border border-border/70 bg-card/60 p-4 text-center">
+        <AppIcon size={44} round className="shadow-e2" />
+        <h3 className="mt-2 font-semibold text-[15px] text-foreground">
+          Bubble Chat
+        </h3>
+        <div className="font-mono text-[10.5px] text-muted-foreground">
+          Messenger + Zalo Desktop
         </div>
-          <div className="text-[14px] font-semibold text-foreground">Bubble Chat</div>
-          <div className="font-mono text-[10.5px] text-muted-foreground">Messenger + Zalo Desktop</div>
         <button
           type="button"
           onClick={() => void checkForUpdates()}
           disabled={updateInfo.status === "checking"}
-          className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 font-medium text-[11.5px] text-primary-foreground shadow-xs transition-opacity hover:opacity-90 active:scale-98"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-3 py-1.5 font-medium text-[11.5px] text-foreground transition-all hover:bg-muted active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <RefreshCw size={11} className={updateInfo.status === "checking" ? "animate-spin" : ""} />
-          {updateInfo.status === "checking" ? "Checking…" : updateInfo.status === "up-to-date" ? `Up to date (v${version})` : "Check updates"}
+          <RotateCcw
+            size={12}
+            className={updateInfo.status === "checking" ? "animate-spin" : ""}
+          />
+          {updateInfo.status === "checking"
+            ? t("checking")
+            : updateInfo.status === "up-to-date"
+              ? t("upToDate", { version })
+              : t("checkUpdates")}
         </button>
         {updateInfo.status === "available" && (
           <div className="mt-2.5 flex flex-col items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-[11.5px] font-medium text-emerald-500">
-            <div>New version available: <strong>{updateInfo.latestVersion}</strong></div>
+            <div>
+              {t("updateAvailable", {
+                version: updateInfo.latestVersion || "",
+              })}
+            </div>
             <button
               type="button"
               onClick={() => void openUpdateDownload()}
               className="cursor-pointer inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1 font-semibold text-white shadow-xs hover:bg-emerald-500 active:scale-95"
             >
-              {updateInfo.downloadUrl ? "Download update" : "View release"}
+              {updateInfo.downloadUrl ? t("downloadUpdate") : t("viewRelease")}
             </button>
             {updateInfo.releaseNotes && (
               <p className="mt-1 max-h-16 overflow-y-auto whitespace-pre-line text-left font-normal text-muted-foreground text-[10.5px]">
@@ -553,79 +668,149 @@ function AboutPane({
             )}
           </div>
         )}
-        {updateInfo.status === "error" && <div className="mt-2 text-[11px] text-danger">{updateInfo.error}</div>}
+        {updateInfo.status === "error" && (
+          <div className="mt-2 text-[11px] text-danger">{updateInfo.error}</div>
+        )}
       </div>
 
-      <Group title="Environment">
+      <Group title={t("environment")}>
         <div className="flex items-center justify-between py-2 text-[12px]">
-          <span className="text-muted-foreground">App version</span>
-          <span className="font-mono text-[11px] text-foreground">{version}</span>
+          <span className="text-muted-foreground">{t("appVersion")}</span>
+          <span className="font-mono text-[11px] text-foreground">
+            {version}
+          </span>
         </div>
         <div className="flex items-center justify-between py-2 text-[12px]">
           <span className="text-muted-foreground">Electron</span>
-          <span className="font-mono text-[11px] text-foreground">{electron}</span>
+          <span className="font-mono text-[11px] text-foreground">
+            {electron}
+          </span>
         </div>
         <div className="flex items-center justify-between py-2 text-[12px]">
           <span className="text-muted-foreground">Chromium</span>
-          <span className="font-mono text-[11px] text-foreground">{chromium}</span>
+          <span className="font-mono text-[11px] text-foreground">
+            {chromium}
+          </span>
         </div>
       </Group>
 
-      <Group title="Developer">
+      <Group title={t("developer")}>
         <div className="flex items-center justify-between gap-3 py-2">
           <div>
-            <div className="text-[12px] font-medium text-foreground">Nguyen Minh Quoc</div>
-            <div className="font-mono text-[11px] text-muted-foreground">0866 007 219</div>
+            <div className="text-[12px] font-medium text-foreground">
+              Nguyen Minh Quoc
+            </div>
+            <div className="font-mono text-[11px] text-muted-foreground">
+              0866 007 219
+            </div>
           </div>
           <button
             type="button"
             onClick={() => {
-              desktop()?.copyDeveloperPhone();
-              setCopied(true);
-              window.setTimeout(() => setCopied(false), 1500);
+              desktop()?.copyDeveloperPhone()
+              setCopied(true)
+              window.setTimeout(() => setCopied(false), 1500)
             }}
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
-            {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
+            {copied ? <Check size={13} /> : <Copy size={13} />}{" "}
+            {copied ? t("copied") : t("copy")}
           </button>
         </div>
       </Group>
     </>
-  );
+  )
 }
 
 /* ---------- Main Component ---------- */
 
 export default function SettingsWindow({ onClose }: { onClose: () => void }) {
-  const [section, setSection] = useState<Section | null>(null);
-  const { updateInfo, checkForUpdates, openUpdateDownload } = useAppUpdate();
-  const version = updateInfo.currentVersion || "…";
+  const { t, lang, setLanguage } = useTranslation()
+  const [section, setSection] = useState<Section | null>(null)
+  const { updateInfo, checkForUpdates, openUpdateDownload } = useAppUpdate()
+  const version = updateInfo.currentVersion || "…"
 
-  const activeMeta = SECTIONS.find((s) => s.id === section);
+  const sections: Array<{
+    id: Section
+    label: string
+    desc: string
+    icon: typeof Settings2
+    accent: string
+  }> = [
+    {
+      id: "general",
+      label: t("general"),
+      desc: t("generalDesc"),
+      icon: Settings2,
+      accent: "bg-blue-500/15 text-blue-500",
+    },
+    {
+      id: "appearance",
+      label: t("appearance"),
+      desc: t("appearanceDesc"),
+      icon: Palette,
+      accent: "bg-purple-500/15 text-purple-500",
+    },
+    {
+      id: "behavior",
+      label: t("behavior"),
+      desc: t("behaviorDesc"),
+      icon: MousePointerClick,
+      accent: "bg-amber-500/15 text-amber-500",
+    },
+    {
+      id: "performance",
+      label: t("performance"),
+      desc: t("performanceDesc"),
+      icon: Gauge,
+      accent: "bg-emerald-500/15 text-emerald-500",
+    },
+    {
+      id: "privacy",
+      label: t("privacy"),
+      desc: t("privacyDesc"),
+      icon: Shield,
+      accent: "bg-teal-500/15 text-teal-500",
+    },
+    {
+      id: "about",
+      label: t("about"),
+      desc: t("aboutDesc"),
+      icon: Info,
+      accent: "bg-slate-500/15 text-slate-500 dark:text-slate-400",
+    },
+  ]
+
+  const activeMeta = sections.find((s) => s.id === section)
 
   const renderContent = () => {
     switch (section) {
       case "general":
-        return <GeneralPane />;
+        return <GeneralPane />
       case "appearance":
-        return <AppearancePane />;
+        return <AppearancePane />
       case "behavior":
-        return <BehaviorPane />;
+        return <BehaviorPane />
       case "performance":
-        return <PerformancePane />;
+        return <PerformancePane />
       case "privacy":
-        return <PrivacyPane />;
+        return <PrivacyPane />
       case "about":
-        return <AboutPane version={version} updateInfo={updateInfo} checkForUpdates={checkForUpdates} openUpdateDownload={openUpdateDownload} />;
+        return (
+          <AboutPane
+            version={version}
+            updateInfo={updateInfo}
+            checkForUpdates={checkForUpdates}
+            openUpdateDownload={openUpdateDownload}
+          />
+        )
       default:
-        return null;
+        return null
     }
-  };
+  }
 
   return (
-    <div
-      className="flex h-full w-full flex-col overflow-hidden bg-panel"
-    >
+    <div className="flex h-full w-full flex-col overflow-hidden bg-panel">
       {/* Header */}
       <header className="flex h-11 shrink-0 items-center justify-between border-b border-border/50 bg-card/60 px-3 select-none">
         {section ? (
@@ -636,7 +821,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
               className="flex items-center gap-0.5 rounded-md px-1.5 py-1 font-medium text-[12px] text-primary transition-colors hover:bg-muted"
             >
               <ChevronLeft size={16} />
-              <span>Back</span>
+              <span>{t("back")}</span>
             </button>
             <span className="text-border-strong">/</span>
             <span className="truncate font-semibold text-[13px] text-foreground">
@@ -646,26 +831,41 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
         ) : (
           <div className="flex items-center gap-2">
             <AppIcon size={16} />
-            <span className="font-semibold text-[13px] text-foreground">Settings</span>
+            <span className="font-semibold text-[13px] text-foreground">
+              {t("settings")}
+            </span>
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex items-center gap-1 rounded-md bg-muted/80 px-2.5 py-1 font-medium text-[11.5px] text-foreground transition-colors hover:bg-border"
-        >
-          <span>Done</span>
-          <X size={12} className="opacity-70" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setLanguage(lang === "vi" ? "en" : "vi")}
+            className="flex items-center gap-1 rounded-md border border-border/70 bg-card/60 px-2 py-0.5 font-mono text-[11px] font-semibold text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
+            title={
+              lang === "vi" ? "Switch to English" : "Chuyển sang Tiếng Việt"
+            }
+          >
+            <Languages size={12} className="opacity-70" />
+            <span>{lang === "vi" ? "VI" : "EN"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center gap-1 rounded-md bg-muted/80 px-2.5 py-1 font-medium text-[11.5px] text-foreground transition-colors hover:bg-border cursor-pointer"
+          >
+            <span>{t("done")}</span>
+            <X size={12} className="opacity-70" />
+          </button>
+        </div>
       </header>
 
       {/* Main body area */}
       <div className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3">
         {section === null ? (
           <div className="space-y-1">
-            {SECTIONS.map((item) => {
-              const Icon = item.icon;
+            {sections.map((item) => {
+              const Icon = item.icon
               return (
                 <button
                   key={item.id}
@@ -673,18 +873,29 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
                   onClick={() => setSection(item.id)}
                   className="group flex w-full items-center gap-3 rounded-xl border border-border/40 bg-card/50 px-3 py-2.5 text-left transition-all hover:border-border/80 hover:bg-card active:scale-[0.99]"
                 >
-                  <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${item.accent}`}>
+                  <div
+                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${item.accent}`}
+                  >
                     <Icon size={16} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-medium text-[13px] text-foreground group-hover:text-primary">
-                      {item.label}{item.id === "about" && updateInfo.status === "available" && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-danger align-middle" />}
+                      {item.label}
+                      {item.id === "about" &&
+                        updateInfo.status === "available" && (
+                          <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-danger align-middle" />
+                        )}
                     </div>
-                    <div className="truncate text-[11px] text-muted-foreground">{item.desc}</div>
+                    <div className="truncate text-[11px] text-muted-foreground">
+                      {item.desc}
+                    </div>
                   </div>
-                  <ChevronRight size={14} className="shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5" />
+                  <ChevronRight
+                    size={14}
+                    className="shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5"
+                  />
                 </button>
-              );
+              )
             })}
           </div>
         ) : (
@@ -699,5 +910,5 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
         </div>
       )}
     </div>
-  );
+  )
 }
