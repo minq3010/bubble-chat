@@ -16,7 +16,12 @@ import {
   Copy,
   Languages,
 } from "lucide-react"
-import { AppIcon } from "./BrandIcons"
+import {
+  AppIcon,
+  BubbleIcon,
+  bubbleIconNames,
+  type BubbleIconName,
+} from "./BrandIcons"
 import { desktop } from "../desktop/bridge"
 import { useAppUpdate } from "../hooks/useAppUpdate"
 import { withTransitionSuppression } from "../utils/theme"
@@ -310,6 +315,16 @@ function AppearancePane() {
   const [size, setSize] = useState(
     () => localStorage.getItem("bubble.bubbleSize") || "Medium",
   )
+  const [opacity, setOpacity] = useState(() => {
+    const value = Number(localStorage.getItem("bubble.bubbleOpacity"))
+    return value >= 20 && value <= 100 ? value : 100
+  })
+  const [icon, setIcon] = useState<BubbleIconName>(() => {
+    const value = localStorage.getItem("bubble.bubbleIcon")
+    return bubbleIconNames.includes(value as BubbleIconName)
+      ? value as BubbleIconName
+      : "default"
+  })
 
   useEffect(() => {
     desktop()
@@ -318,6 +333,12 @@ function AppearancePane() {
         if (settings) {
           if (settings.theme) setTheme(settings.theme)
           if (settings.bubbleSize) setSize(settings.bubbleSize)
+          if (Number.isFinite(settings.bubbleOpacity)) {
+            setOpacity(settings.bubbleOpacity)
+          }
+          if (bubbleIconNames.includes(settings.bubbleIcon as BubbleIconName)) {
+            setIcon(settings.bubbleIcon as BubbleIconName)
+          }
         }
       })
       .catch(() => {})
@@ -353,6 +374,27 @@ function AppearancePane() {
     )
   }
 
+  const saveOpacity = (value: number) => {
+    setOpacity(value)
+    try {
+      localStorage.setItem("bubble.bubbleOpacity", String(value))
+    } catch {}
+    desktop()?.setAppearance({ bubbleOpacity: value })
+  }
+
+  const saveIcon = (value: BubbleIconName) => {
+    setIcon(value)
+    try {
+      localStorage.setItem("bubble.bubbleIcon", value)
+    } catch {}
+    desktop()?.setAppearance({ bubbleIcon: value })
+    window.dispatchEvent(
+      new CustomEvent("bubble:appearance", {
+        detail: { key: "bubble.bubbleIcon", value },
+      }),
+    )
+  }
+
   return (
     <>
       <Group title={t("themeMode")}>
@@ -372,6 +414,55 @@ function AppearancePane() {
             value={size}
             onChange={saveSize}
           />
+        </div>
+      </Group>
+
+      <Group title={t("bubbleOpacity")}>
+        <div className="py-2.5">
+          <div className="flex items-center gap-3">
+            <label
+              htmlFor="bubble-opacity"
+              className="text-[12px] font-medium text-foreground"
+            >
+              {t("bubbleOpacity")}
+            </label>
+            <input
+              id="bubble-opacity"
+              type="range"
+              min="20"
+              max="100"
+              step="5"
+              value={opacity}
+              onChange={(event) => saveOpacity(Number(event.target.value))}
+              className="min-w-0 flex-1 accent-primary"
+            />
+            <span className="w-9 text-right font-mono text-[11px] text-muted-foreground">
+              {opacity}%
+            </span>
+          </div>
+        </div>
+      </Group>
+
+      <Group title={t("bubbleIcon")}>
+        <div className="grid grid-cols-5 gap-2 py-2.5">
+          {bubbleIconNames.map((name) => (
+            <button
+              key={name}
+              type="button"
+              aria-label={t(
+                `icon${name[0].toUpperCase()}${name.slice(1)}` as "iconDefault",
+              )}
+              aria-pressed={icon === name}
+              onClick={() => saveIcon(name)}
+              className={`grid place-items-center rounded-lg border p-2 transition-all ${
+                icon === name
+                  ? "border-primary bg-primary/10 ring-2 ring-primary/20"
+                  : "border-border/70 bg-muted/40 hover:bg-muted"
+              }`}
+            >
+              <BubbleIcon name={name} size={30} />
+            </button>
+          ))}
         </div>
       </Group>
     </>
@@ -639,6 +730,7 @@ type AboutPaneProps = {
   remainingSeconds?: number
   updateInfo: ReturnType<typeof useAppUpdate>["updateInfo"]
   checkForUpdates: () => Promise<void>
+  installUpdate: () => Promise<unknown> | undefined
   openUpdateDownload: () => Promise<void> | undefined
 }
 
@@ -647,12 +739,15 @@ function AboutPane({
   remainingSeconds,
   updateInfo,
   checkForUpdates,
+  installUpdate,
   openUpdateDownload,
 }: AboutPaneProps) {
   const { t, lang } = useTranslation()
   const [copied, setCopied] = useState(false)
   const electron = "44.2.0"
   const chromium = "152.0.7977.76"
+  const updateInProgress =
+    updateInfo.status === "downloading" || updateInfo.status === "installing"
 
   return (
     <>
@@ -667,7 +762,7 @@ function AboutPane({
         <button
           type="button"
           onClick={() => void checkForUpdates()}
-          disabled={updateInfo.status === "checking"}
+          disabled={updateInfo.status === "checking" || updateInProgress}
           className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-3 py-1.5 font-medium text-[11.5px] text-foreground transition-all hover:bg-muted active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RotateCcw
@@ -676,9 +771,13 @@ function AboutPane({
           />
           {updateInfo.status === "checking"
             ? t("checking")
-            : updateInfo.status === "up-to-date"
-              ? t("upToDate", { version })
-              : t("checkUpdates")}
+            : updateInfo.status === "downloading"
+              ? t("downloadingUpdate")
+              : updateInfo.status === "installing"
+                ? t("installingUpdate")
+                : updateInfo.status === "up-to-date"
+                  ? t("upToDate", { version })
+                  : t("checkUpdates")}
         </button>
         {updateInfo.status === "available" && (
           <div className="mt-2.5 flex flex-col items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-[11.5px] font-medium text-emerald-500">
@@ -689,7 +788,11 @@ function AboutPane({
             </div>
             <button
               type="button"
-              onClick={() => void openUpdateDownload()}
+              onClick={() =>
+                void (updateInfo.downloadUrl
+                  ? installUpdate()
+                  : openUpdateDownload())
+              }
               className="cursor-pointer inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1 font-semibold text-white shadow-xs hover:bg-emerald-500 active:scale-95"
             >
               {updateInfo.downloadUrl ? t("downloadUpdate") : t("viewRelease")}
@@ -773,10 +876,9 @@ function AboutPane({
 export default function SettingsWindow({ onClose }: { onClose: () => void }) {
   const { t, lang, setLanguage } = useTranslation()
   const [section, setSection] = useState<Section | null>(null)
-  const [remainingSeconds, setRemainingSeconds] = useState<number | undefined>(
-    () => (desktop()?.isElectron ? 14400 : undefined),
-  )
-  const { updateInfo, checkForUpdates, openUpdateDownload } = useAppUpdate()
+  const [remainingSeconds, setRemainingSeconds] = useState<number | undefined>()
+  const { updateInfo, checkForUpdates, installUpdate, openUpdateDownload } =
+    useAppUpdate()
   const version = updateInfo.currentVersion || "…"
 
   useEffect(() => {
@@ -786,12 +888,10 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
         ?.getLockStatus?.()
         .then((res) => {
           if (active) {
-            if (typeof res?.remainingSeconds === "number") {
+            if (res?.enabled === false) {
+              setRemainingSeconds(undefined)
+            } else if (typeof res?.remainingSeconds === "number") {
               setRemainingSeconds(res.remainingSeconds)
-            } else if (res && !res.isLocked) {
-              setRemainingSeconds((prev) =>
-                typeof prev === "number" ? prev : 14400,
-              )
             }
           }
         })
@@ -896,6 +996,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
             remainingSeconds={remainingSeconds}
             updateInfo={updateInfo}
             checkForUpdates={checkForUpdates}
+            installUpdate={installUpdate}
             openUpdateDownload={openUpdateDownload}
           />
         )

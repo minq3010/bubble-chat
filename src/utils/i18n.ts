@@ -19,7 +19,7 @@ export const translations = {
 
     // Subtitles
     generalDesc: "Khởi động, hút cạnh, ngôn ngữ",
-    appearanceDesc: "Chế độ màu, kích thước bong bóng",
+    appearanceDesc: "Chế độ màu, kích thước và độ mờ bong bóng",
     behaviorDesc: "Ghim trên cùng, phím tắt",
     performanceDesc: "Quản lý bộ nhớ & bộ nhớ đệm",
     privacyDesc: "Xóa cookie, dữ liệu phiên & quảng cáo",
@@ -48,6 +48,13 @@ export const translations = {
     bubbleSizeSmall: "Nhỏ",
     bubbleSizeMedium: "Vừa",
     bubbleSizeLarge: "Lớn",
+    bubbleOpacity: "Độ mờ bong bóng",
+    bubbleIcon: "Biểu tượng bong bóng",
+    iconDefault: "Mặc định",
+    iconMessage: "Tin nhắn",
+    iconSpark: "Lấp lánh",
+    iconHeart: "Trái tim",
+    iconBolt: "Tia sét",
 
     // Behavior Settings
     alwaysOnTop: "Luôn hiển thị trên cùng",
@@ -92,6 +99,8 @@ export const translations = {
     // About
     checkUpdates: "Kiểm tra cập nhật",
     checking: "Đang kiểm tra…",
+    downloadingUpdate: "Đang tải bản cập nhật…",
+    installingUpdate: "Đang cài đặt bản cập nhật…",
     upToDate: "Đã là bản mới nhất (v{version})",
     updateAvailable: "Có bản cập nhật mới: v{version}",
     downloadUpdate: "Tải bản cập nhật",
@@ -162,7 +171,7 @@ export const translations = {
 
     // Subtitles
     generalDesc: "Startup, dock edge, language",
-    appearanceDesc: "Color mode, bubble size",
+    appearanceDesc: "Color mode, bubble size and opacity",
     behaviorDesc: "Always on top, hotkeys",
     performanceDesc: "Memory management & caching",
     privacyDesc: "Clear cookies, session storage & ads",
@@ -190,6 +199,13 @@ export const translations = {
     bubbleSizeSmall: "Small",
     bubbleSizeMedium: "Medium",
     bubbleSizeLarge: "Large",
+    bubbleOpacity: "Bubble opacity",
+    bubbleIcon: "Bubble icon",
+    iconDefault: "Default",
+    iconMessage: "Message",
+    iconSpark: "Spark",
+    iconHeart: "Heart",
+    iconBolt: "Bolt",
 
     // Behavior Settings
     alwaysOnTop: "Always on top",
@@ -232,6 +248,8 @@ export const translations = {
     // About
     checkUpdates: "Check updates",
     checking: "Checking…",
+    downloadingUpdate: "Downloading update…",
+    installingUpdate: "Installing update…",
     upToDate: "Up to date (v{version})",
     updateAvailable: "Update available: v{version}",
     downloadUpdate: "Download update",

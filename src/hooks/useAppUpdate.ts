@@ -21,14 +21,24 @@ export function useAppUpdate() {
   }, [])
 
   const checkForUpdates = useCallback(async () => {
-    const info = await desktop()?.checkForUpdates()
-    if (info) setUpdateInfo(info)
+    try {
+      const info = await desktop()?.checkForUpdates()
+      if (info?.status === "available" && info.downloadUrl) {
+        await desktop()?.installUpdate()
+      } else if (info) {
+        setUpdateInfo(info)
+      }
+    } catch {
+      // The main process reports download/install errors through onUpdateStatus.
+    }
   }, [])
+
+  const installUpdate = useCallback(() => desktop()?.installUpdate(), [])
 
   const openUpdateDownload = useCallback(
     () => desktop()?.openUpdateDownload(),
     [],
   )
 
-  return { updateInfo, checkForUpdates, openUpdateDownload }
+  return { updateInfo, checkForUpdates, installUpdate, openUpdateDownload }
 }

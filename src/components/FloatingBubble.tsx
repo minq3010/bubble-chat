@@ -1,4 +1,4 @@
-import { AppIcon } from "./BrandIcons"
+import { BubbleIcon, type BubbleIconName } from "./BrandIcons"
 
 export type BubbleState = "idle" | "unread" | "dragging" | "snapped" | "active"
 
@@ -12,6 +12,7 @@ export default function FloatingBubble({
   onClick,
   style,
   className = "",
+  icon = "default",
 }: {
   state?: BubbleState
   size?: keyof typeof sizeMap
@@ -20,6 +21,7 @@ export default function FloatingBubble({
   onClick?: () => void
   style?: React.CSSProperties
   className?: string
+  icon?: BubbleIconName
 }) {
   const px = sizeMap[size]
   const dragging = state === "dragging"
@@ -63,7 +65,7 @@ export default function FloatingBubble({
         className="grid place-items-center overflow-hidden rounded-full select-none"
         style={{ width: px, height: px }}
       >
-        <AppIcon size={px} round className="h-full w-full object-contain" />
+        <BubbleIcon name={icon} size={px} round className="h-full w-full" />
       </span>
 
       {showBadge && (

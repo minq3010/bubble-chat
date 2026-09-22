@@ -3,6 +3,21 @@ type IconProps = {
   size?: number
 }
 
+export const bubbleIconNames = [
+  "default",
+  "message",
+  "spark",
+  "heart",
+  "bolt",
+] as const
+
+export type BubbleIconName = typeof bubbleIconNames[number]
+
+type BubbleIconProps = IconProps & {
+  name?: BubbleIconName
+  round?: boolean
+}
+
 export function MessengerIcon({ className, size = 20 }: IconProps) {
   return (
     <svg
@@ -69,6 +84,61 @@ export function AppIcon({
       alt="Bubble Chat"
       aria-hidden="true"
     />
+  )
+}
+
+export function BubbleIcon({
+  name = "default",
+  className,
+  size = 24,
+  round = true,
+}: BubbleIconProps) {
+  if (name === "default") {
+    return <AppIcon size={size} round={round} className={className} />
+  }
+
+  const paths = {
+    message: (
+      <>
+        <path d="M12 3c-5.1 0-9 3.32-9 7.8 0 2.54 1.38 4.8 3.63 6.2L6 20.5l3.45-1.76c.81.2 1.66.3 2.55.3 5.1 0 9-3.32 9-7.8S17.1 3 12 3Z" />
+        <circle cx="8.5" cy="10.8" r="1" fill="currentColor" />
+        <circle cx="12" cy="10.8" r="1" fill="currentColor" />
+        <circle cx="15.5" cy="10.8" r="1" fill="currentColor" />
+      </>
+    ),
+    spark: (
+      <path d="m12 2 1.85 6.15L20 10l-6.15 1.85L12 18l-1.85-6.15L4 10l6.15-1.85L12 2Zm7.1 14.2.82 2.08L22 19.1l-2.08.82L19.1 22l-.82-2.08-2.08-.82 2.08-.82.82-2.08Z" />
+    ),
+    heart: (
+      <path d="M12 20.5 4.7 13.6A5.15 5.15 0 0 1 12 6.2a5.15 5.15 0 0 1 7.3 7.4L12 20.5Z" />
+    ),
+    bolt: <path d="M13.45 2 5 13h5.7L9.55 22 19 10.2h-5.8L13.45 2Z" />,
+  }[name]
+
+  const colors = {
+    message: "linear-gradient(135deg,#0a7cff,#6f4bff)",
+    spark: "linear-gradient(135deg,#f59e0b,#ef4444)",
+    heart: "linear-gradient(135deg,#ec4899,#ef4444)",
+    bolt: "linear-gradient(135deg,#14b8a6,#0ea5e9)",
+  }[name]
+
+  return (
+    <span
+      className={`grid place-items-center overflow-hidden select-none ${
+        round ? "rounded-full" : ""
+      } ${className || ""}`}
+      style={{ width: size, height: size, background: colors }}
+      aria-hidden="true"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width={size * 0.58}
+        height={size * 0.58}
+        fill="white"
+      >
+        {paths}
+      </svg>
+    </span>
   )
 }
 

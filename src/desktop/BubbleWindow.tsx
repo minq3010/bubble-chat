@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import FloatingBubble from "../components/FloatingBubble"
+import { bubbleIconNames, type BubbleIconName } from "../components/BrandIcons"
 import { desktop } from "./bridge"
 import { totalUnread, useUnreadCounts } from "../hooks/useUnreadCounts"
 import { withTransitionSuppression } from "../utils/theme"
@@ -17,6 +18,16 @@ export default function BubbleWindow() {
   const [size, setSize] = useState<"Small" | "Medium" | "Large">(() => {
     const value = localStorage.getItem("bubble.bubbleSize")
     return value === "Small" || value === "Large" ? value : "Medium"
+  })
+  const [opacity, setOpacity] = useState(() => {
+    const value = Number(localStorage.getItem("bubble.bubbleOpacity"))
+    return value >= 20 && value <= 100 ? value : 100
+  })
+  const [icon, setIcon] = useState<BubbleIconName>(() => {
+    const value = localStorage.getItem("bubble.bubbleIcon")
+    return bubbleIconNames.includes(value as BubbleIconName)
+      ? value as BubbleIconName
+      : "default"
   })
   const [systemIsDark, setSystemIsDark] = useState(() =>
     typeof window !== "undefined" && window.matchMedia
@@ -44,6 +55,12 @@ export default function BubbleWindow() {
         ) {
           setSize(settings.bubbleSize)
         }
+        if (Number.isFinite(settings?.bubbleOpacity)) {
+          setOpacity(settings.bubbleOpacity)
+        }
+        if (bubbleIconNames.includes(settings?.bubbleIcon as BubbleIconName)) {
+          setIcon(settings.bubbleIcon as BubbleIconName)
+        }
       })
       .catch(() => {})
 
@@ -69,6 +86,15 @@ export default function BubbleWindow() {
       ) {
         setSize(data.bubbleSize)
       }
+      if (
+        typeof data.bubbleOpacity === "number" &&
+        Number.isFinite(data.bubbleOpacity)
+      ) {
+        setOpacity(data.bubbleOpacity)
+      }
+      if (bubbleIconNames.includes(data.bubbleIcon as BubbleIconName)) {
+        setIcon(data.bubbleIcon as BubbleIconName)
+      }
     })
 
     type AppearanceEventDetail = {
@@ -89,6 +115,16 @@ export default function BubbleWindow() {
           value.value === "Large")
       ) {
         setSize(value.value)
+      }
+      if (value.key === "bubble.bubbleOpacity") {
+        const next = Number(value.value)
+        if (next >= 20 && next <= 100) setOpacity(next)
+      }
+      if (
+        value.key === "bubble.bubbleIcon" &&
+        bubbleIconNames.includes(value.value as BubbleIconName)
+      ) {
+        setIcon(value.value as BubbleIconName)
       }
     }
     window.addEventListener("bubble:appearance", onAppearance)
@@ -178,6 +214,7 @@ export default function BubbleWindow() {
     >
       <div
         onPointerDown={onPointerDown}
+        style={{ opacity: opacity / 100 }}
         className={`cursor-grab select-none active:cursor-grabbing ${
           isDraggingVisual ? "cursor-grabbing" : ""
         }`}
@@ -186,6 +223,7 @@ export default function BubbleWindow() {
           state={isDraggingVisual ? "dragging" : unread > 0 ? "unread" : "idle"}
           unread={unread}
           size={size}
+          icon={icon}
         />
       </div>
     </div>

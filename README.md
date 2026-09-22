@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.5-blue.svg" alt="Version 1.0.5" />
+  <img src="https://img.shields.io/badge/version-1.0.6-blue.svg" alt="Version 1.0.6" />
   <img src="https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white" alt="Electron" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19" />
   <img src="https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white" alt="Vite" />
@@ -64,9 +64,44 @@
 
 Bạn có thể tải về phiên bản mới nhất tại mục [Releases](https://github.com/minq3010/bubble-chat/releases):
 
-- **macOS**: `Bubble-Chat-1.0.0-arm64.dmg` (Apple Silicon) hoặc `Bubble-Chat-1.0.0.dmg` (Intel)
-- **Windows**: `Bubble-Chat-Setup-1.0.0.exe` (NSIS Installer)
-- **Linux**: `Bubble-Chat-1.0.0.AppImage` hoặc `bubble-chat_1.0.0_amd64.deb`
+- **macOS**: `Bubble-Chat-<version>-mac-arm64.dmg` (Apple Silicon)
+- **Windows**: `Bubble-Chat-<version>-win-x64.exe` (Windows 64-bit)
+- **Linux**: `Bubble-Chat-<version>-linux-x64.deb` (Debian/Ubuntu 64-bit)
+
+### macOS
+
+1. Tải file `.dmg` dành cho Apple Silicon.
+2. Mở file `.dmg`, kéo **Bubble Chat** vào thư mục **Applications**.
+3. Mở ứng dụng từ Launchpad hoặc Applications. Nếu macOS cảnh báo ứng dụng tải từ Internet, bấm chuột phải vào ứng dụng, chọn **Open**, rồi xác nhận.
+
+Nếu macOS vẫn chặn ứng dụng chưa có chữ ký, chạy lệnh sau trong Terminal để gỡ cờ quarantine riêng cho Bubble Chat:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Bubble Chat.app"
+```
+
+Sau đó mở lại ứng dụng từ Applications.
+
+### Windows
+
+1. Tải file `.exe` dành cho Windows 64-bit.
+2. Chạy installer và làm theo hướng dẫn trên màn hình.
+3. Mở **Bubble Chat** từ Start Menu hoặc shortcut trên Desktop.
+
+### Linux
+
+1. Tải file `.deb` dành cho Linux 64-bit.
+2. Mở file bằng Software Center, hoặc cài từ Terminal:
+
+   ```bash
+   sudo apt install ./Bubble-Chat-<version>-linux-x64.deb
+   ```
+
+3. Mở **Bubble Chat** từ menu ứng dụng. Gói `.deb` cần quyền quản trị khi cài đặt.
+
+### Cập nhật tự động
+
+Vào **Cài đặt → Giới thiệu → Kiểm tra cập nhật**. Khi có bản mới và đúng installer cho nền tảng đang dùng, ứng dụng sẽ tự tải, cài đè và khởi động lại. Windows có thể yêu cầu quyền UAC; Linux có thể yêu cầu mật khẩu quản trị. Nếu release không có file phù hợp, ứng dụng sẽ mở trang Releases để tải thủ công.
 
 ---
 
@@ -112,6 +147,10 @@ pnpm build:linux
 pnpm build:all
 ```
 File cài đặt sau khi build thành công sẽ nằm trong thư mục `release/`.
+
+### Cấu hình TOTP
+
+Trong lúc phát triển, đặt `BUBBLE_ENABLE_TOTP=false` trong `.env` để tắt khóa sau 4 giờ và màn hình nhập OTP; đặt `true` cùng `BUBBLE_TOTP_SECRET` để bật. Khi release bằng GitHub Actions, thêm GitHub Secret `BUBBLE_ENABLE_TOTP` với giá trị `false` hoặc `true`. Workflow ghi giá trị này vào gói cài đặt. Nếu bật, cần thêm Secret `BUBBLE_TOTP_SECRET`. Khi tắt hoặc chưa tạo Secret, bản release không có khóa TOTP và không chứa mã bí mật.
 
 ---
 

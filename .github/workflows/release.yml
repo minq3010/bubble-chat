@@ -53,17 +53,17 @@ jobs:
       - name: Test update selection
         run: node electron/update-utils.test.cjs
 
-      - name: Inject TOTP secret
+      - name: Configure TOTP from GitHub Secrets
         env:
+          BUBBLE_ENABLE_TOTP: ${{ secrets.BUBBLE_ENABLE_TOTP }}
           BUBBLE_TOTP_SECRET: ${{ secrets.BUBBLE_TOTP_SECRET }}
         run: |
-          node -e "if (process.env.BUBBLE_TOTP_SECRET) require('fs').writeFileSync('electron/totp-secret.json', JSON.stringify({ secret: process.env.BUBBLE_TOTP_SECRET }))"
+          node -e "const fs = require('node:fs'); const value = process.env.BUBBLE_ENABLE_TOTP; if (value && value !== 'true' && value !== 'false') throw new Error('BUBBLE_ENABLE_TOTP must be true or false'); const enabled = value === 'true'; if (enabled && !process.env.BUBBLE_TOTP_SECRET) throw new Error('BUBBLE_TOTP_SECRET is required when TOTP is enabled'); fs.writeFileSync('electron/release-config.json', JSON.stringify(enabled ? { totp: true, secret: process.env.BUBBLE_TOTP_SECRET } : { totp: false }))"
 
       - name: Package app
         run: ${{ matrix.command }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          BUBBLE_TOTP_SECRET: ${{ secrets.BUBBLE_TOTP_SECRET }}
 
       - name: Upload installers
         uses: actions/upload-artifact@v4

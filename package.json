@@ -1,11 +1,11 @@
 {
   "name": "bubble-chat",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Bubble Chat desktop app for Messenger and Zalo",
   "author": {
     "name": "Nguyen Minh Quoc",
-    "email": "admin@minq.io.vn"
+    "email": "minhquoc@minq.io.vn"
   },
   "type": "module",
   "main": "electron/main.cjs",
@@ -29,7 +29,8 @@
     "icon": "public/bubble-chat-icon.png",
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "!electron/totp-secret.json"
     ],
     "directories": {
       "output": "release"

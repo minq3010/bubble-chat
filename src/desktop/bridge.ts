@@ -1,5 +1,5 @@
 export type UpdateInfo = {
-  status: "idle" | "checking" | "available" | "up-to-date" | "error"
+  status: "idle" | "checking" | "available" | "downloading" | "installing" | "up-to-date" | "error"
   currentVersion: string
   latestVersion?: string
   releaseNotes?: string
@@ -11,6 +11,8 @@ export type UpdateInfo = {
 export type AppearanceData = {
   theme?: string
   bubbleSize?: string
+  bubbleOpacity?: number
+  bubbleIcon?: string
 }
 
 export type UnreadCallbackCounts = {
@@ -37,6 +39,7 @@ export type TotpVerifyResult = {
 }
 
 export type LockStatus = {
+  enabled?: boolean
   isLocked: boolean
   remainingSeconds?: number
   lockoutRemainingSeconds?: number
@@ -50,6 +53,7 @@ export type DesktopBridge = {
   getAppVersion: () => Promise<string>
   getUpdateInfo: () => Promise<UpdateInfo>
   checkForUpdates: () => Promise<UpdateInfo>
+  installUpdate: () => Promise<UpdateInfo>
   openUpdateDownload: () => Promise<void>
   onUpdateStatus: (cb: (info: UpdateInfo) => void) => () => void
   getSettings: () => Promise<Record<string, any>>

@@ -17,10 +17,15 @@ const path = require("node:path")
 const fs = require("node:fs")
 const crypto = require("node:crypto")
 const os = require("node:os")
+const { spawn } = require("node:child_process")
 try {
   require("dotenv").config({ path: path.join(__dirname, "../.env") })
 } catch {}
 const { compareVersions, selectAsset } = require("./update-utils.cjs")
+const releaseConfig = require("./release-config.json")
+const ENABLE_TOTP = app.isPackaged
+  ? releaseConfig.totp === true
+  : process.env.BUBBLE_ENABLE_TOTP === "true"
 
 const DEV_URL = process.env.VITE_DEV_URL || "http://localhost:8443"
 const isDev = !app.isPackaged
@@ -54,6 +59,7 @@ const PANEL_CONFIG = {
   maxHeight: 550,
   heightRatio: 0.57,
 }
+const BUBBLE_ICONS = new Set(["default", "message", "spark", "heart", "bolt"])
 
 let bubbleWin = null
 let panelWin = null
@@ -70,13 +76,16 @@ let panelShowTimestamp = 0
 let lastPanelBlurHide = 0
 let panelWasVisibleBeforeDrag = false
 let updateCheck = null
+let updateInstall = null
 let updateInfo = { status: "idle", currentVersion: app.getVersion() }
 
 // Secret resolution for TOTP and Shadow Store HMAC signing
 let embeddedSecret = ""
-try {
-  embeddedSecret = require("./totp-secret.json").secret
-} catch {}
+if (ENABLE_TOTP) {
+  try {
+    embeddedSecret = require("./totp-secret.json").secret
+  } catch {}
+}
 
 function getMachineFingerprint() {
   try {
@@ -107,12 +116,20 @@ function generateMachineBase32Fallback() {
   return result
 }
 
-const APP_TOTP_SECRET =
-  process.env.BUBBLE_TOTP_SECRET ||
-  embeddedSecret ||
-  generateMachineBase32Fallback()
+const APP_TOTP_SECRET = ENABLE_TOTP
+  ? app.isPackaged
+    ? releaseConfig.secret
+    : process.env.BUBBLE_TOTP_SECRET ||
+      embeddedSecret ||
+      generateMachineBase32Fallback()
+  : ""
+if (ENABLE_TOTP && !APP_TOTP_SECRET) {
+  throw new Error("TOTP is enabled without a secret")
+}
 
-const SEC_ENC_KEY = crypto.scryptSync(APP_TOTP_SECRET, MACHINE_FP, 32)
+const SEC_ENC_KEY = ENABLE_TOTP
+  ? crypto.scryptSync(APP_TOTP_SECRET, MACHINE_FP, 32)
+  : null
 
 function encryptSecurityPayload(obj) {
   try {
@@ -147,6 +164,7 @@ function decryptSecurityPayload(base64Str) {
 function readState() {
   try {
     const raw = JSON.parse(fs.readFileSync(stateFile, "utf8"))
+    if (!ENABLE_TOTP) return raw || {}
     if (raw && typeof raw._sec === "string") {
       const sec = decryptSecurityPayload(raw._sec)
       if (sec) {
@@ -386,7 +404,17 @@ if (savedSettings.theme) {
   nativeTheme.themeSource = savedSettings.theme.toLowerCase()
 }
 
-const resolvedUsage = resolveInitialState(savedSettings)
+const resolvedUsage = ENABLE_TOTP
+  ? resolveInitialState(savedSettings)
+  : {
+      remainingUsageSeconds: 0,
+      isLocked: false,
+      sessionCycleId: "",
+      lastActiveTimestamp: 0,
+      initialInstallTimestamp: 0,
+      failedOtpAttempts: 0,
+      lockoutUntil: 0,
+    }
 let remainingUsageSeconds = resolvedUsage.remainingUsageSeconds
 let isLocked = resolvedUsage.isLocked
 let sessionCycleId = resolvedUsage.sessionCycleId
@@ -398,6 +426,14 @@ let lockoutUntil = resolvedUsage.lockoutUntil || 0
 function writeState(patch) {
   const current = readState()
   const next = { ...current, ...patch }
+
+  if (!ENABLE_TOTP) {
+    try {
+      fs.mkdirSync(path.dirname(stateFile), { recursive: true })
+      fs.writeFileSync(stateFile, JSON.stringify(next, null, 2))
+    } catch {}
+    return next
+  }
 
   if (typeof patch.remainingUsageSeconds === "number") {
     remainingUsageSeconds = patch.remainingUsageSeconds
@@ -452,15 +488,17 @@ function writeState(patch) {
 }
 
 // Initial sync to ensure all stores are aligned
-writeState({
-  remainingUsageSeconds,
-  isLocked,
-  failedOtpAttempts,
-  lockoutUntil,
-  sessionCycleId,
-  lastActiveTimestamp,
-  initialInstallTimestamp,
-})
+if (ENABLE_TOTP) {
+  writeState({
+    remainingUsageSeconds,
+    isLocked,
+    failedOtpAttempts,
+    lockoutUntil,
+    sessionCycleId,
+    lastActiveTimestamp,
+    initialInstallTimestamp,
+  })
+}
 
 // TOTP verification implementation (RFC 6238, 60-second period, ±30s tolerance)
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
@@ -516,8 +554,9 @@ function verifyTOTP(token, base32Secret, period = 60, windowTolerance = 1) {
   return false
 }
 
-// Background accumulated usage timer: decrements every 10 seconds while active
+// Background accumulated usage timer: decrements every second while active
 setInterval(() => {
+  if (!ENABLE_TOTP) return
   if (!isLocked) {
     const now = Date.now()
     if (lastActiveTimestamp > 0 && now < lastActiveTimestamp - 60000) {
@@ -557,6 +596,7 @@ setInterval(() => {
 
 // Periodic persistence
 setInterval(() => {
+  if (!ENABLE_TOTP) return
   writeState({
     remainingUsageSeconds,
     isLocked,
@@ -674,6 +714,128 @@ async function checkAppUpdate() {
   }
 }
 
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`
+}
+
+function launchUpdateScript(scriptPath) {
+  const child = spawn("/bin/sh", [scriptPath], {
+    detached: true,
+    stdio: "ignore",
+  })
+  child.unref()
+  setTimeout(() => app.quit(), 300)
+}
+
+async function installAppUpdate() {
+  if (updateInstall) return updateInstall
+  const url = updateInfo.downloadUrl
+  if (!isTrustedReleaseUrl(url)) {
+    throw new Error("No trusted update download is available")
+  }
+
+  updateInstall = (async () => {
+    const currentVersion = app.getVersion()
+    setUpdateInfo({ ...updateInfo, status: "downloading", currentVersion })
+    const response = await net.fetch(url, {
+      headers: { Accept: "application/octet-stream" },
+      signal: AbortSignal.timeout(120000),
+    })
+    if (!response.ok) throw new Error(`Download failed (${response.status})`)
+
+    const extension = path.extname(new URL(url).pathname).toLowerCase()
+    const installerPath = path.join(
+      app.getPath("temp"),
+      `bubble-chat-update-${Date.now()}${extension}`,
+    )
+    await fs.promises.writeFile(
+      installerPath,
+      Buffer.from(await response.arrayBuffer()),
+    )
+    setUpdateInfo({ ...updateInfo, status: "installing", currentVersion })
+
+    if (process.platform === "win32") {
+      const installer = spawn(installerPath, ["/S"], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: false,
+      })
+      installer.unref()
+      setTimeout(() => app.quit(), 300)
+      return { ...updateInfo, status: "installing", currentVersion }
+    }
+
+    if (process.platform === "darwin") {
+      if (extension !== ".dmg" && extension !== ".zip") {
+        throw new Error("Unsupported macOS installer")
+      }
+      const currentApp = path.resolve(
+        path.dirname(process.execPath),
+        "../../..",
+      )
+      const workDir = `${installerPath}.work`
+      const sourceBlock =
+        extension === ".dmg"
+          ? `MOUNT=$(hdiutil attach ${shellQuote(installerPath)} -nobrowse -readonly | awk '/\\/Volumes\\// {print substr($0,index($0,"/Volumes/")); exit}')\nAPP=$(find "$MOUNT" -maxdepth 1 -name "*.app" -print -quit)`
+          : `mkdir -p ${shellQuote(workDir)}\nditto -x -k ${shellQuote(installerPath)} ${shellQuote(workDir)}\nAPP=$(find ${shellQuote(workDir)} -maxdepth 2 -name "*.app" -print -quit)`
+      const cleanup =
+        extension === ".dmg"
+          ? `hdiutil detach "$MOUNT" >/dev/null 2>&1 || true`
+          : `rm -rf ${shellQuote(workDir)}`
+      const scriptPath = `${installerPath}.sh`
+      const script = `#!/bin/sh
+set -eu
+sleep 1
+${sourceBlock}
+test -n "$APP"
+rm -rf ${shellQuote(currentApp)}
+ditto "$APP" ${shellQuote(currentApp)}
+${cleanup}
+rm -f ${shellQuote(installerPath)} "$0"
+open ${shellQuote(currentApp)}
+`
+      await fs.promises.writeFile(scriptPath, script, { mode: 0o700 })
+      launchUpdateScript(scriptPath)
+      return { ...updateInfo, status: "installing", currentVersion }
+    }
+
+    if (extension === ".deb") {
+      const scriptPath = `${installerPath}.sh`
+      const script = `#!/bin/sh
+set -eu
+sleep 1
+if command -v pkexec >/dev/null 2>&1; then
+  pkexec dpkg -i ${shellQuote(installerPath)}
+  rm -f ${shellQuote(installerPath)} "$0"
+  exec ${shellQuote(process.execPath)}
+else
+  xdg-open ${shellQuote(installerPath)} >/dev/null 2>&1 || true
+fi
+`
+      await fs.promises.writeFile(scriptPath, script, { mode: 0o700 })
+      launchUpdateScript(scriptPath)
+      return { ...updateInfo, status: "installing", currentVersion }
+    }
+
+    throw new Error("Unsupported Linux installer")
+  })()
+
+  try {
+    return await updateInstall
+  } catch (error) {
+    const currentVersion = app.getVersion()
+    const next = {
+      status: "error",
+      currentVersion,
+      error: error instanceof Error ? error.message : "Update failed",
+    }
+    setUpdateInfo(next)
+    throw error
+  } finally {
+    updateInstall = null
+  }
+}
+
 function createBubble() {
   const { workArea } = screen.getPrimaryDisplay()
   const saved = rememberPosition && readState().bubblePosition
@@ -740,18 +902,30 @@ function createPanel() {
     },
   })
   panelWin.setAlwaysOnTop(alwaysOnTop, "screen-saver")
+  panelWin.webContents.on("context-menu", (event, params) => {
+    event.preventDefault()
+    showWebContextMenu(panelWin.webContents, params, panelWin, false)
+  })
+  panelWin.webContents.on("did-attach-webview", (_event, guestContents) => {
+    guestContents.on("context-menu", (event, params) => {
+      event.preventDefault()
+      showWebContextMenu(guestContents, params, panelWin, true)
+    })
+  })
   loadRoute(panelWin, "panel")
   panelWin.webContents.on("did-finish-load", () => {
     panelWin?.webContents.send("notifications:unread", unreadCounts)
     const now = Date.now()
     const lockoutRemainingSeconds =
       lockoutUntil > now ? Math.ceil((lockoutUntil - now) / 1000) : 0
-    panelWin?.webContents.send("lock:status", {
-      isLocked,
-      remainingSeconds: remainingUsageSeconds,
-      lockoutRemainingSeconds,
-      failedAttempts: failedOtpAttempts,
-    })
+    if (ENABLE_TOTP) {
+      panelWin?.webContents.send("lock:status", {
+        isLocked,
+        remainingSeconds: remainingUsageSeconds,
+        lockoutRemainingSeconds,
+        failedAttempts: failedOtpAttempts,
+      })
+    }
     sendUpdateInfo(panelWin)
   })
   panelWin.on("closed", () => (panelWin = null))
@@ -956,6 +1130,64 @@ function showBubbleContextMenu() {
   ]).popup({ window: bubbleWin })
 }
 
+function showWebContextMenu(target, params, popupWindow, includeNavigation) {
+  if (!target || target.isDestroyed() || !popupWindow) return
+  const items = []
+  const openableUrl = (value) =>
+    typeof value === "string" && /^https?:\/\//i.test(value)
+
+  if (includeNavigation) {
+    items.push(
+      {
+        label: "Back",
+        enabled: target.canGoBack(),
+        click: () => target.goBack(),
+      },
+      {
+        label: "Forward",
+        enabled: target.canGoForward(),
+        click: () => target.goForward(),
+      },
+      { label: "Reload", click: () => target.reload() },
+      { type: "separator" },
+    )
+  }
+
+  if (openableUrl(params?.linkURL)) {
+    items.push({
+      label: "Open link in browser",
+      click: () => shell.openExternal(params.linkURL),
+    })
+  }
+
+  if (params?.mediaType === "image" && openableUrl(params.srcURL)) {
+    items.push({
+      label: "Download image",
+      click: () => target.downloadURL(params.srcURL),
+    })
+  }
+
+  if (params?.isEditable) {
+    items.push(
+      { label: "Undo", click: () => target.undo() },
+      { label: "Redo", click: () => target.redo() },
+      { type: "separator" },
+      { label: "Cut", click: () => target.cut() },
+      { label: "Copy", click: () => target.copy() },
+      { label: "Paste", click: () => target.paste() },
+      { label: "Select all", click: () => target.selectAll() },
+    )
+  } else if (params?.selectionText) {
+    items.push({ label: "Copy", click: () => target.copy() })
+  }
+
+  if (items.length === 0) {
+    items.push({ label: "Select all", click: () => target.selectAll() })
+  }
+
+  Menu.buildFromTemplate(items).popup({ window: popupWindow })
+}
+
 function openProvider(which) {
   if (!["messenger", "zalo", "custom", "settings"].includes(which)) return
   if (!panelWin) createPanel()
@@ -1093,9 +1325,14 @@ ipcMain.on("settings:appearance", (_e, data) => {
     nativeTheme.themeSource = data.theme.toLowerCase()
   }
   if (data?.bubbleSize) patch.bubbleSize = data.bubbleSize
+  if (Number.isFinite(data?.bubbleOpacity)) {
+    patch.bubbleOpacity = Math.max(20, Math.min(100, data.bubbleOpacity))
+  }
+  if (BUBBLE_ICONS.has(data?.bubbleIcon)) patch.bubbleIcon = data.bubbleIcon
+  if (Object.keys(patch).length === 0) return
   writeState(patch)
-  bubbleWin?.webContents.send("settings:appearance", data)
-  panelWin?.webContents.send("settings:appearance", data)
+  bubbleWin?.webContents.send("settings:appearance", patch)
+  panelWin?.webContents.send("settings:appearance", patch)
 })
 ipcMain.handle("settings:get", () => {
   const state = readState()
@@ -1109,6 +1346,12 @@ ipcMain.handle("settings:get", () => {
     performanceMode: state.performanceMode || "Balanced",
     theme: state.theme || "System",
     bubbleSize: state.bubbleSize || "Medium",
+    bubbleOpacity: Number.isFinite(state.bubbleOpacity)
+      ? Math.max(20, Math.min(100, state.bubbleOpacity))
+      : 100,
+    bubbleIcon: BUBBLE_ICONS.has(state.bubbleIcon)
+      ? state.bubbleIcon
+      : "default",
     panelSize: state.panelSize || null,
   }
 })
@@ -1174,10 +1417,12 @@ ipcMain.handle("system:trimMemory", async () => {
   return true
 })
 ipcMain.handle("totp:getStatus", () => {
+  if (!ENABLE_TOTP) return { enabled: false, isLocked: false }
   const now = Date.now()
   const lockoutRemainingSeconds =
     lockoutUntil > now ? Math.ceil((lockoutUntil - now) / 1000) : 0
   return {
+    enabled: true,
     isLocked,
     remainingSeconds: remainingUsageSeconds,
     lockoutRemainingSeconds,
@@ -1185,6 +1430,7 @@ ipcMain.handle("totp:getStatus", () => {
   }
 })
 ipcMain.handle("totp:verify", (_e, code) => {
+  if (!ENABLE_TOTP) return { success: false, error: "disabled" }
   const now = Date.now()
   // Block attempts while locked out
   if (lockoutUntil > now) {
@@ -1254,6 +1500,7 @@ ipcMain.handle("totp:verify", (_e, code) => {
 ipcMain.handle("app:getVersion", () => app.getVersion())
 ipcMain.handle("update:getInfo", () => updateInfo)
 ipcMain.handle("update:check", () => checkAppUpdate())
+ipcMain.handle("update:install", () => installAppUpdate())
 ipcMain.handle("update:openDownload", async () => {
   const url = updateInfo.downloadUrl || updateInfo.releaseUrl
   if (!isTrustedReleaseUrl(url))
