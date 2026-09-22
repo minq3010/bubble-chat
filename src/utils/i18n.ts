@@ -19,7 +19,7 @@ export const translations = {
 
     // Subtitles
     generalDesc: "Khởi động, hút cạnh, ngôn ngữ",
-    appearanceDesc: "Chế độ màu, kích thước và độ mờ bong bóng",
+    appearanceDesc: "Chế độ màu, kích thước và độ mờ bong bóng & bảng chat",
     behaviorDesc: "Ghim trên cùng, phím tắt",
     performanceDesc: "Quản lý bộ nhớ & bộ nhớ đệm",
     privacyDesc: "Xóa cookie, dữ liệu phiên & quảng cáo",
@@ -48,7 +48,7 @@ export const translations = {
     bubbleSizeSmall: "Nhỏ",
     bubbleSizeMedium: "Vừa",
     bubbleSizeLarge: "Lớn",
-    bubbleOpacity: "Độ mờ bong bóng",
+    bubbleOpacity: "Độ mờ bong bóng & bảng chat",
     bubbleIcon: "Biểu tượng bong bóng",
     iconDefault: "Mặc định",
     iconMessage: "Tin nhắn",
@@ -171,7 +171,7 @@ export const translations = {
 
     // Subtitles
     generalDesc: "Startup, dock edge, language",
-    appearanceDesc: "Color mode, bubble size and opacity",
+    appearanceDesc: "Color mode, bubble size and panel opacity",
     behaviorDesc: "Always on top, hotkeys",
     performanceDesc: "Memory management & caching",
     privacyDesc: "Clear cookies, session storage & ads",
@@ -199,7 +199,7 @@ export const translations = {
     bubbleSizeSmall: "Small",
     bubbleSizeMedium: "Medium",
     bubbleSizeLarge: "Large",
-    bubbleOpacity: "Bubble opacity",
+    bubbleOpacity: "Bubble & panel opacity",
     bubbleIcon: "Bubble icon",
     iconDefault: "Default",
     iconMessage: "Message",

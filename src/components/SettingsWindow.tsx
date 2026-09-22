@@ -380,6 +380,11 @@ function AppearancePane() {
       localStorage.setItem("bubble.bubbleOpacity", String(value))
     } catch {}
     desktop()?.setAppearance({ bubbleOpacity: value })
+    window.dispatchEvent(
+      new CustomEvent("bubble:appearance", {
+        detail: { key: "bubble.bubbleOpacity", value: String(value) },
+      }),
+    )
   }
 
   const saveIcon = (value: BubbleIconName) => {
@@ -418,14 +423,14 @@ function AppearancePane() {
       </Group>
 
       <Group title={t("bubbleOpacity")}>
-        <div className="py-2.5">
+        <div className="space-y-2 py-2.5">
+          <label
+            htmlFor="bubble-opacity"
+            className="block text-[12px] font-medium text-foreground"
+          >
+            {t("bubbleOpacity")}
+          </label>
           <div className="flex items-center gap-3">
-            <label
-              htmlFor="bubble-opacity"
-              className="text-[12px] font-medium text-foreground"
-            >
-              {t("bubbleOpacity")}
-            </label>
             <input
               id="bubble-opacity"
               type="range"

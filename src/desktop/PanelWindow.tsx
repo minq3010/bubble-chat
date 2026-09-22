@@ -14,6 +14,10 @@ export default function PanelWindow() {
   const [theme, setTheme] = useState(
     () => localStorage.getItem("bubble.theme") || "System",
   )
+  const [opacity, setOpacity] = useState(() => {
+    const value = Number(localStorage.getItem("bubble.bubbleOpacity"))
+    return value >= 20 && value <= 100 ? value : 100
+  })
   const [systemIsDark, setSystemIsDark] = useState(() =>
     typeof window !== "undefined" && window.matchMedia
       ? window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -29,6 +33,9 @@ export default function PanelWindow() {
       .then((settings) => {
         if (settings?.theme) {
           setTheme((prev) => (prev === settings.theme ? prev : settings.theme))
+        }
+        if (Number.isFinite(settings?.bubbleOpacity)) {
+          setOpacity(settings.bubbleOpacity)
         }
       })
       .catch(() => {})
@@ -47,6 +54,12 @@ export default function PanelWindow() {
           setTheme((prev) => (prev === data.theme ? prev : data.theme || prev))
         })
       }
+      if (
+        typeof data.bubbleOpacity === "number" &&
+        Number.isFinite(data.bubbleOpacity)
+      ) {
+        setOpacity(data.bubbleOpacity)
+      }
     })
 
     type AppearanceEventDetail = {
@@ -59,6 +72,10 @@ export default function PanelWindow() {
         withTransitionSuppression(() => {
           setTheme((prev) => (prev === value.value ? prev : value.value))
         })
+      }
+      if (value.key === "bubble.bubbleOpacity") {
+        const next = Number(value.value)
+        if (next >= 20 && next <= 100) setOpacity(next)
       }
     }
     window.addEventListener("bubble:appearance", onAppearance)
@@ -112,7 +129,10 @@ export default function PanelWindow() {
         isDark ? "dark" : ""
       } h-screen w-screen bg-transparent select-none`}
     >
-      <div className="h-full w-full overflow-hidden rounded-[16px] border border-border/80 bg-panel">
+      <div
+        className="h-full w-full overflow-hidden rounded-[16px] border border-border/80 bg-panel"
+        style={{ opacity: opacity / 100 }}
+      >
         {isLocked ? (
           <LockScreen onUnlocked={() => setIsLocked(false)} />
         ) : view === "settings" ? (

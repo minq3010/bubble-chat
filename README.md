@@ -1,138 +1,208 @@
-# 💬 Bubble Chat
+<a id="bubble-chat"></a>
+<div align="center">
 
-<p align="center">
-  <strong>Bong bóng chat tiện lợi cho Messenger & Zalo ngay trên màn hình Desktop của bạn.</strong>
-</p>
+  <img src="public/bubble-chat-icon.png" width="96" height="96" alt="Bubble Chat Logo" />
 
-<p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.6-blue.svg" alt="Version 1.0.6" />
-  <img src="https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white" alt="Electron" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19" />
-  <img src="https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white" alt="Vite" />
-  <img src="https://img.shields.io/badge/TailwindCSS-v4-38B2AC?logo=tailwind-css&logoColor=white" alt="Tailwind CSS v4" />
-  <img src="https://img.shields.io/badge/Platform-macOS%20|%20Windows%20|%20Linux-lightgrey.svg" alt="Platforms" />
-</p>
+  # Bubble Chat
 
----
+  **Truy cập Facebook Messenger và Zalo tức thì từ bong bóng chat nổi thông minh trên máy tính.**
 
-## 🌟 Giới thiệu
+  <p>
+    <a href="https://github.com/minq3010/bubble-chat/releases/latest">
+      <img src="https://img.shields.io/badge/Release-v1.0.7-0084FF?style=flat-square" alt="Version 1.0.7" />
+    </a>
+    <img src="https://img.shields.io/badge/Platform-macOS_%7C_Windows_%7C_Linux-27272a?style=flat-square" alt="Platforms" />
+    <img src="https://img.shields.io/badge/Stack-Electron_%E2%80%A2_React_%E2%80%A2_Vite-0284c7?style=flat-square" alt="Tech Stack" />
+    <a href="https://github.com/minq3010/bubble-chat/stargazers">
+      <img src="https://img.shields.io/github/stars/minq3010/bubble-chat?style=flat-square&color=d97706" alt="Stars" />
+    </a>
+  </p>
 
-**Bubble Chat** là ứng dụng desktop hiện đại, mang trải nghiệm bong bóng chat (Chat Head) quen thuộc trên thiết bị di động lên máy tính cá nhân. Với khả năng tích hợp đồng thời cả **Facebook Messenger** và **Zalo**, bạn có thể nhắn tin nhanh chóng, theo dõi thông báo và chuyển đổi qua lại mà không cần phải mở nhiều tab trình duyệt cồng kềnh.
+  <p>
+    <a href="#muc-luc">Mục lục</a> •
+    <a href="#tai-xuong">Tải xuống</a> •
+    <a href="#tinh-nang">Tính năng</a> •
+    <a href="#phim-tat">Phím tắt</a> •
+    <a href="#cai-dat">Cài đặt</a> •
+    <a href="#phat-trien">Dành cho Developers</a>
+  </p>
 
----
-
-## ✨ Tính năng nổi bật
-
-### 🎈 Bong bóng nổi thông minh (Floating Bubble)
-- **Luôn nổi trên cùng (Always on Top)**: Luôn hiển thị trên các cửa sổ làm việc khác để bạn không bỏ lỡ tin nhắn.
-- **Kéo & Thả linh hoạt (Drag & Drop)**: Dễ dàng di chuyển bong bóng tới bất kỳ vị trí nào trên màn hình.
-- **Tự động bám mép (Snap to Edge)**: Tự động hít gọn vào cạnh màn hình trái/phải sau khi thả tay để không chiếm không gian hiển thị.
-- **Huy hiệu thông báo (Unread Badge)**: Tự động phát hiện và đếm số lượng tin nhắn chưa đọc từ Messenger & Zalo theo thời gian thực.
-- **Tùy biến kích thước & giao diện**: Hỗ trợ 3 kích thước bong bóng (*Small, Medium, Large*) cùng 2 chủ đề màu sắc (*Light Mode, Dark Mode*).
-
-### 💬 Cửa sổ chat tiện lợi (Smart Chat Panel)
-- **Định vị thông minh**: Tự động tính toán không gian khả dụng bên trái/phải bong bóng để mở cửa sổ chat ở vị trí thuận tiện nhất.
-- **Chuyển đổi tức thì (Tab Switching)**: Chuyển đổi qua lại mượt mà giữa **Facebook Messenger** và **Zalo**.
-- **Tự đóng khi bấm ra ngoài (Close on Blur)**: Tiết kiệm không gian làm việc; chỉ cần nhấp chuột ra ngoài cửa sổ chat sẽ tự động ẩn đi.
-- **Tùy chỉnh độ thu phóng (Zoom)**: Phóng to hoặc thu nhỏ nội dung hiển thị của từng ứng dụng chat theo nhu cầu.
-
-### ⚡ Chế độ tối ưu tài nguyên (Performance Modes)
-- **Low Memory**: Tự động giải phóng và tạm dừng webview không hoạt động để tiết kiệm tối đa RAM.
-- **Balanced**: Cân bằng tối ưu giữa việc giữ bộ nhớ đệm và sử dụng tài nguyên.
-- **Instant Switching**: Giữ cả 2 ứng dụng trong RAM để chuyển đổi qua lại tức thì không cần tải lại.
-
-### 🛡️ Tích hợp hệ thống & Bảo mật
-- **Phiên đăng nhập độc lập (Isolated Sessions)**: Cookie và session của Messenger và Zalo được lưu trữ trong phân vùng riêng biệt (`persist:messenger`, `persist:zalo`), đảm bảo an toàn và bảo mật.
-- **Quản lý dữ liệu & Bộ nhớ đệm**: Cho phép xóa cookie, session hoặc cache của từng nền tảng hoặc toàn bộ ứng dụng chỉ với một nhấp chuột trong phần Cài đặt.
-- **Khay hệ thống (System Tray)**: Hỗ trợ chạy nền, ẩn/hiện nhanh qua biểu tượng tại Taskbar/Menu Bar.
-- **Khởi động cùng hệ thống**: Tùy chọn tự động khởi chạy Bubble Chat khi mở máy tính.
-- **Hỗ trợ đa màn hình**: Tự động khôi phục và đưa bong bóng về vùng an toàn khi thay đổi cấu hình màn hình.
+</div>
 
 ---
 
-## ⌨️ Phím tắt toàn hệ thống (Global Shortcuts)
+<a id="muc-luc"></a>
+## Mục lục
+
+- [Tính năng nổi bật](#tinh-nang)
+  - [Bong bóng chat (Floating Bubble)](#bong-bong-chat)
+  - [Tích hợp Messenger & Zalo](#tich-hop)
+  - [Tùy biến giao diện](#tuy-bien)
+  - [Bảo mật & Hiệu năng](#bao-mat-hieu-nang)
+- [Phím tắt toàn hệ thống](#phim-tat)
+- [Tải xuống](#tai-xuong)
+- [Hướng dẫn cài đặt](#cai-dat)
+  - [macOS](#cai-dat-macos)
+  - [Windows](#cai-dat-windows)
+  - [Linux](#cai-dat-linux)
+  - [Cập nhật tự động](#cap-nhat-tu-dong)
+- [Dành cho nhà phát triển](#phat-trien)
+  - [Yêu cầu môi trường](#yeu-cau-moi-truong)
+  - [Cài đặt & Khởi chạy](#khoi-chay-dev)
+  - [Đóng gói ứng dụng (Build)](#dong-goi-build)
+  - [Cấu hình TOTP & Biến môi trường](#cau-hinh-totp)
+- [Cấu trúc thư mục dự án](#cau-truc-du-an)
+- [Công nghệ sử dụng](#cong-nghe)
+- [Tác giả](#tac-gia)
+
+---
+
+<a id="tinh-nang"></a>
+## Tính năng nổi bật
+
+<a id="bong-bong-chat"></a>
+### Bong bóng chat (Floating Bubble)
+- **Luôn hiển thị trên cùng (Always on Top):** Nhấp chuột để mở nhanh khung chat, nhấp lại để thu gọn.
+- **Kéo thả tự do:** Di chuyển bong bóng đến vị trí mong muốn; tự động lưu tọa độ và hỗ trợ đa màn hình.
+- **Đếm tin nhắn chưa đọc:** Huy hiệu thông báo hiển thị tổng số tin nhắn mới theo thời gian thực từ cả hai nền tảng.
+
+<a id="tich-hop"></a>
+### Tích hợp Messenger & Zalo
+- **Giao diện hợp nhất:** Sử dụng song song Facebook Messenger và Zalo Web trong một cửa sổ duy nhất.
+- **Chuyển đổi nhanh:** Đổi qua lại giữa các tab chỉ với một cú nhấp chuột.
+- **Thu phóng nội dung (Zoom):** Tùy chỉnh tỷ lệ hiển thị riêng biệt cho từng dịch vụ chat.
+- **Tự đóng khi mất tiêu điểm (Close on Blur):** Tự động ẩn khung chat khi nhấp chuột ra ngoài màn hình làm việc.
+
+<a id="tuy-bien"></a>
+### Tùy biến giao diện
+- **Chế độ màu:** Hỗ trợ Sáng (Light), Tối (Dark) và Tự động theo hệ thống (System).
+- **Kích thước & Độ trong suốt:** Cho phép chỉnh kích thước bong bóng (Nhỏ / Vừa / Lớn) và độ mờ (Opacity 20% - 100%) của cả bong bóng lẫn khung chat.
+- **Biểu tượng:** Đa dạng lựa chọn icon bong bóng tùy theo sở thích.
+
+<a id="bao-mat-hieu-nang"></a>
+### Bảo mật & Hiệu năng
+- **Bảo vệ bằng 2FA (TOTP):** Tích hợp màn hình khóa bảo mật bằng mã xác thực 2 bước.
+- **Phân vùng dữ liệu độc lập:** Quản lý session và cookie riêng biệt (`persist:messenger`, `persist:zalo`), đảm bảo an toàn tài khoản.
+- **Quản lý bộ nhớ:** Dễ dàng xóa cache, cookie và dữ liệu duyệt web bất cứ lúc nào.
+- **Chế độ hiệu năng (Performance Modes):**
+  - **Low Memory:** Giải phóng webview nền để giảm thiểu mức chiếm dụng RAM.
+  - **Balanced:** Cân bằng giữa tốc độ phản hồi và bộ nhớ sử dụng.
+  - **Instant Switching:** Giữ sẵn cả hai ứng dụng trong RAM để chuyển tab tức thì.
+- **Khay hệ thống (System Tray):** Ẩn ứng dụng xuống khay hệ thống khi không sử dụng.
+
+[↑ Lên đầu trang](#bubble-chat)
+
+---
+
+<a id="phim-tat"></a>
+## Phím tắt toàn hệ thống
 
 | Phím tắt | Chức năng |
 | :--- | :--- |
-| `Alt + Command/Ctrl + B` | Ẩn / Hiện bong bóng chat (Bubble Chat) |
-| `Alt + Command/Ctrl + M` | Mở nhanh cửa sổ chat **Facebook Messenger** |
-| `Alt + Command/Ctrl + Z` | Mở nhanh cửa sổ chat **Zalo** |
+| <kbd>Alt</kbd> + <kbd>Cmd / Ctrl</kbd> + <kbd>B</kbd> | Bật / Tắt hiển thị bong bóng chat |
+| <kbd>Alt</kbd> + <kbd>Cmd / Ctrl</kbd> + <kbd>M</kbd> | Mở nhanh cửa sổ Messenger |
+| <kbd>Alt</kbd> + <kbd>Cmd / Ctrl</kbd> + <kbd>Z</kbd> | Mở nhanh cửa sổ Zalo |
+
+[↑ Lên đầu trang](#bubble-chat)
 
 ---
 
-## 📥 Cài đặt & Tải về
+<a id="tai-xuong"></a>
+## Tải xuống
 
-Bạn có thể tải về phiên bản mới nhất tại mục [Releases](https://github.com/minq3010/bubble-chat/releases):
+Các gói cài đặt trực tiếp cho phiên bản **v1.0.7**:
 
-- **macOS**: `Bubble-Chat-<version>-mac-arm64.dmg` (Apple Silicon)
-- **Windows**: `Bubble-Chat-<version>-win-x64.exe` (Windows 64-bit)
-- **Linux**: `Bubble-Chat-<version>-linux-x64.deb` (Debian/Ubuntu 64-bit)
+| Nền tảng | Kiến trúc | Liên kết tải về | Định dạng |
+| :--- | :---: | :--- | :---: |
+| macOS | Apple Silicon (`arm64`) | [Tải về Bubble Chat cho macOS](https://github.com/minq3010/bubble-chat/releases/download/v1.0.7/Bubble-Chat-1.0.7-mac-arm64.dmg) | `.dmg` |
+| Windows | 64-bit (`x64`) | [Tải về Bubble Chat cho Windows](https://github.com/minq3010/bubble-chat/releases/download/v1.0.7/Bubble-Chat-1.0.7-win-x64.exe) | `.exe` |
+| Linux | Ubuntu / Debian (`amd64`) | [Tải về Bubble Chat cho Linux](https://github.com/minq3010/bubble-chat/releases/download/v1.0.7/Bubble-Chat-1.0.7-linux-amd64.deb) | `.deb` |
 
+> [!TIP]
+> Bạn có thể xem toàn bộ các bản phát hành và lịch sử cập nhật tại mục [Releases](https://github.com/minq3010/bubble-chat/releases).
+
+[↑ Lên đầu trang](#bubble-chat)
+
+---
+
+<a id="cai-dat"></a>
+## Hướng dẫn cài đặt
+
+<a id="cai-dat-macos"></a>
 ### macOS
 
-1. Tải file `.dmg` dành cho Apple Silicon.
-2. Mở file `.dmg`, kéo **Bubble Chat** vào thư mục **Applications**.
-3. Mở ứng dụng từ Launchpad hoặc Applications. Nếu macOS cảnh báo ứng dụng tải từ Internet, bấm chuột phải vào ứng dụng, chọn **Open**, rồi xác nhận.
+1. Tải về tệp `.dmg`.
+2. Kéo biểu tượng **Bubble Chat** vào thư mục **Applications**.
+3. Mở ứng dụng từ **Launchpad** hoặc **Applications**.
 
-Nếu macOS vẫn chặn ứng dụng chưa có chữ ký, chạy lệnh sau trong Terminal để gỡ cờ quarantine riêng cho Bubble Chat:
-
-```bash
-xattr -dr com.apple.quarantine "/Applications/Bubble Chat.app"
-```
-
-Sau đó mở lại ứng dụng từ Applications.
-
-### Windows
-
-1. Tải file `.exe` dành cho Windows 64-bit.
-2. Chạy installer và làm theo hướng dẫn trên màn hình.
-3. Mở **Bubble Chat** từ Start Menu hoặc shortcut trên Desktop.
-
-### Linux
-
-1. Tải file `.deb` dành cho Linux 64-bit.
-2. Mở file bằng Software Center, hoặc cài từ Terminal:
-
-   ```bash
-   sudo apt install ./Bubble-Chat-<version>-linux-x64.deb
-   ```
-
-3. Mở **Bubble Chat** từ menu ứng dụng. Gói `.deb` cần quyền quản trị khi cài đặt.
-
-### Cập nhật tự động
-
-Vào **Cài đặt → Giới thiệu → Kiểm tra cập nhật**. Khi có bản mới và đúng installer cho nền tảng đang dùng, ứng dụng sẽ tự tải, cài đè và khởi động lại. Windows có thể yêu cầu quyền UAC; Linux có thể yêu cầu mật khẩu quản trị. Nếu release không có file phù hợp, ứng dụng sẽ mở trang Releases để tải thủ công.
+> [!NOTE]
+> **Nếu macOS chặn ứng dụng chưa xác minh (Gatekeeper):**
+> 1. Chuột phải vào **Bubble Chat** trong `Applications` → Chọn **Open** → Xác nhận **Open**.
+> 2. Hoặc mở **Terminal** và chạy lệnh gỡ cờ cách ly:
+>    ```bash
+>    xattr -dr com.apple.quarantine "/Applications/Bubble Chat.app"
+>    ```
 
 ---
 
-## 🛠️ Hướng dẫn phát triển (Development)
+<a id="cai-dat-windows"></a>
+### Windows
 
-### Yêu cầu tiên quyết
+1. Tải về tệp `.exe`.
+2. Chạy tệp cài đặt và làm theo hướng dẫn trên màn hình.
+3. Mở **Bubble Chat** từ **Start Menu** hoặc màn hình Desktop.
+
+---
+
+<a id="cai-dat-linux"></a>
+### Linux (Ubuntu / Debian)
+
+1. Tải về tệp `.deb`.
+2. Mở tệp bằng trình quản lý phần mềm (Software Install), hoặc chạy lệnh Terminal:
+   ```bash
+   sudo dpkg -i Bubble-Chat-1.0.7-linux-amd64.deb
+   ```
+3. Mở **Bubble Chat** từ menu ứng dụng.
+
+---
+
+<a id="cap-nhat-tu-dong"></a>
+### Cập nhật tự động
+
+Ứng dụng tích hợp sẵn tính năng kiểm tra phiên bản mới:
+- Đi tới **Cài đặt → Giới thiệu → Kiểm tra cập nhật**.
+- Khi có bản mới, ứng dụng sẽ tự động tải về và thông báo cập nhật.
+
+[↑ Lên đầu trang](#bubble-chat)
+
+---
+
+<a id="phat-trien"></a>
+## Dành cho nhà phát triển
+
+<a id="yeu-cau-moi-truong"></a>
+### Yêu cầu môi trường
 - **Node.js**: Phiên bản 22 trở lên
 - **pnpm**: Phiên bản 9 trở lên
 
-### 1. Clone mã nguồn
+<a id="khoi-chay-dev"></a>
+### Cài đặt & Khởi chạy
+
 ```bash
+# Clone repository
 git clone https://github.com/minq3010/bubble-chat.git
 cd bubble-chat
-```
 
-### 2. Cài đặt các gói phụ thuộc
-```bash
+# Cài đặt phụ thuộc
 pnpm install
-```
 
-### 3. Chạy môi trường phát triển (Dev Mode)
-Lệnh này sẽ khởi chạy đồng thời Vite dev server và Electron:
-```bash
+# Khởi chạy Vite dev server và Electron
 pnpm dev
-# hoặc
-pnpm electron:dev
 ```
 
-### 4. Đóng gói ứng dụng (Build Release)
+<a id="dong-goi-build"></a>
+### Đóng gói ứng dụng (Build)
 
-Đóng gói theo từng nền tảng:
 ```bash
 # macOS
 pnpm build:mac
@@ -143,64 +213,77 @@ pnpm build:win
 # Linux
 pnpm build:linux
 
-# Đóng gói tất cả các nền tảng được hỗ trợ trên máy hiện tại
+# Đóng gói tất cả nền tảng
 pnpm build:all
 ```
-File cài đặt sau khi build thành công sẽ nằm trong thư mục `release/`.
+> Tệp sau khi đóng gói được lưu trong thư mục `release/`.
 
-### Cấu hình TOTP
+<a id="cau-hinh-totp"></a>
+### Cấu hình TOTP & Biến môi trường
 
-Trong lúc phát triển, đặt `BUBBLE_ENABLE_TOTP=false` trong `.env` để tắt khóa sau 4 giờ và màn hình nhập OTP; đặt `true` cùng `BUBBLE_TOTP_SECRET` để bật. Khi release bằng GitHub Actions, thêm GitHub Secret `BUBBLE_ENABLE_TOTP` với giá trị `false` hoặc `true`. Workflow ghi giá trị này vào gói cài đặt. Nếu bật, cần thêm Secret `BUBBLE_TOTP_SECRET`. Khi tắt hoặc chưa tạo Secret, bản release không có khóa TOTP và không chứa mã bí mật.
+- **Phát triển cục bộ:** Tạo tệp `.env` (dựa trên mẫu `.env.example`).
+  - Đặt `BUBBLE_ENABLE_TOTP=false` để tắt màn hình khóa 2FA khi phát triển.
+  - Đặt `BUBBLE_ENABLE_TOTP=true` và cung cấp mã bí mật `BUBBLE_TOTP_SECRET` để kiểm tra chức năng 2FA.
+- **GitHub Actions (CI/CD):** Thiết lập GitHub Secret `BUBBLE_ENABLE_TOTP` (`true` hoặc `false`) cùng `BUBBLE_TOTP_SECRET` khi xuất bản release.
+
+[↑ Lên đầu trang](#bubble-chat)
 
 ---
 
-## 📁 Cấu trúc thư mục
+<a id="cau-truc-du-an"></a>
+## Cấu trúc thư mục dự án
 
 ```text
 bubble-chat/
 ├── electron/
-│   ├── main.cjs         # Quy trình chính của Electron (Quản lý cửa sổ, tray, shortcuts, IPC)
-│   └── preload.cjs      # Cầu nối an toàn giữa Electron IPC và React UI qua ContextBridge
+│   ├── main.cjs         # Quản lý vòng đời Electron (Windows, Tray, Shortcuts, IPC)
+│   └── preload.cjs      # ContextBridge kết nối Electron và Webview
 ├── src/
-│   ├── components/      # Các component giao diện React
-│   │   ├── BrandIcons.tsx       # Logo Messenger, Zalo và icon ứng dụng
-│   │   ├── ChatPanel.tsx        # Cửa sổ hiển thị chat & điều khiển webview
-│   │   ├── FloatingBubble.tsx   # Giao diện bong bóng nổi và badge số tin nhắn
-│   │   └── SettingsWindow.tsx   # Cửa sổ cấu hình tổng thể ứng dụng
-│   ├── desktop/         # Tích hợp desktop và định tuyến
-│   │   ├── BubbleWindow.tsx     # Logic xử lý kéo thả và render bong bóng
-│   │   ├── PanelWindow.tsx      # Logic render panel chat
-│   │   └── bridge.ts            # Wrapper gọi API desktop an toàn kiểu Type-safe
-│   ├── hooks/           # Custom React hooks (useUnreadCounts, useWebviewZoom)
-│   ├── App.tsx          # Router điều hướng dựa trên hash (#bubble hoặc panel)
+│   ├── components/      # Các component React UI
+│   │   ├── BrandIcons.tsx       # Biểu tượng Messenger, Zalo và Bubble
+│   │   ├── ChatPanel.tsx        # Cửa sổ chat & điều khiển webview
+│   │   ├── FloatingBubble.tsx   # Bong bóng chat nổi và badge thông báo
+│   │   ├── LockScreen.tsx       # Màn hình khóa bảo vệ 2FA TOTP
+│   │   └── SettingsWindow.tsx   # Cửa sổ cài đặt
+│   ├── desktop/         # Tích hợp desktop và IPC bridge
+│   │   ├── BubbleWindow.tsx     # Xử lý cửa sổ bong bóng và kéo thả
+│   │   ├── PanelWindow.tsx      # Xử lý cửa sổ chat panel
+│   │   └── bridge.ts            # Wrapper gọi API desktop Type-safe
+│   ├── hooks/           # Custom React hooks (unread counts, zoom, updates)
+│   ├── utils/           # Tiện ích đa ngôn ngữ (i18n), xử lý theme
+│   ├── App.tsx          # Router điều hướng giao diện
 │   ├── index.css        # CSS tùy chỉnh với Tailwind CSS v4
-│   └── main.tsx         # Điểm nhập React client
-├── .github/workflows/   # CI/CD GitHub Actions tự động build bản cài đặt khi gắn tag
+│   └── main.tsx         # Điểm vào chính của ứng dụng
+├── public/              # Tài nguyên tĩnh và icon ứng dụng
 ├── package.json
 └── vite.config.ts
 ```
 
----
-
-## 🧰 Công nghệ sử dụng
-
-- **Khung ứng dụng**: [Electron](https://www.electronjs.org/)
-- **Thư viện UI**: [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
-- **Bộ công cụ phát triển & Build**: [Vite 8](https://vitejs.dev/)
-- **Thiết kế & Giao diện**: [Tailwind CSS v4](https://tailwindcss.com/)
-- **Icon**: [Lucide React](https://lucide.dev/)
-- **Bộ đóng gói**: [electron-builder](https://www.electron.build/)
+[↑ Lên đầu trang](#bubble-chat)
 
 ---
 
-## 👤 Tác giả
+<a id="cong-nghe"></a>
+## Công nghệ sử dụng
 
-- **Nguyễn Minh Quốc**
-- Email: [admin@minq.io.vn](mailto:admin@minq.io.vn)
-- GitHub: [@minq3010](https://github.com/minq3010)
+<p>
+  <img src="https://img.shields.io/badge/Electron-44.2-47848F?style=flat-square" alt="Electron" />
+  <img src="https://img.shields.io/badge/React-19.0-61DAFB?style=flat-square" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Vite-8.0-646CFF?style=flat-square" alt="Vite" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=flat-square" alt="Tailwind CSS" />
+  <img src="https://img.shields.io/badge/Lucide_Icons-latest-F56565?style=flat-square" alt="Lucide" />
+</p>
 
 ---
 
-## 📄 Bản quyền & Giấy phép
+<a id="tac-gia"></a>
+<div align="center">
 
-Phát triển với mục đích học tập và phục vụ công việc hàng ngày. Mọi thắc mắc hoặc đóng góp vui lòng mở Issue hoặc Pull Request trên GitHub!
+  Phát triển bởi **[Nguyễn Minh Quốc](https://github.com/minq3010)**
+
+  [![GitHub](https://img.shields.io/badge/GitHub-minq3010-181717?style=flat-square&logo=github)](https://github.com/minq3010)
+  [![Email](https://img.shields.io/badge/Email-minhquoc%40minq.io.vn-EA4335?style=flat-square&logo=gmail&logoColor=white)](mailto:minhquoc@minq.io.vn)
+  [![Báo lỗi](https://img.shields.io/badge/Issues-Báo_lỗi-blue?style=flat-square&logo=github)](https://github.com/minq3010/bubble-chat/issues)
+
+</div>
