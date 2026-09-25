@@ -699,7 +699,6 @@ function PrivacyPane() {
     null,
   )
   const [threshold, setThreshold] = useState<number>(500)
-  const [isCleaningCustom, setIsCleaningCustom] = useState(false)
   const [cleanSuccess, setCleanSuccess] = useState(false)
 
   const customTabName = (() => {
@@ -735,14 +734,12 @@ function PrivacyPane() {
   }
 
   const handleClearCustomCache = async () => {
-    setIsCleaningCustom(true)
     try {
       const updated = await desktop()?.clearCustomCache?.()
       if (updated) setStorageUsage(updated)
       setCleanSuccess(true)
       setTimeout(() => setCleanSuccess(false), 2500)
     } catch {}
-    setIsCleaningCustom(false)
   }
 
   const thresholdOptions = [

@@ -129,7 +129,6 @@ export default function ResizeHandles({ children }: ResizeHandlesProps) {
     e.stopPropagation()
 
     const currentW = window.outerWidth || window.innerWidth
-    const currentH = window.outerHeight || window.innerHeight
 
     // If currently Wide, return to default Compact size AND default position beside bubble
     if (currentW >= 420) {

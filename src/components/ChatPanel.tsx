@@ -21,7 +21,6 @@ import {
   defaultMeta,
   ENTERTAINMENT_PRESETS,
   FailedState,
-  getCustomTabIcon,
   ProviderTab,
   RemoveTabModal,
   type CustomTab,
