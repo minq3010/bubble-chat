@@ -1256,6 +1256,11 @@ ipcMain.handle("panel:getBounds", () => {
   if (!panelWin || panelWin.isDestroyed()) return null
   return panelWin.getBounds()
 })
+ipcMain.on("panel:setPosition", (_e, x, y) => {
+  if (!panelWin || panelWin.isDestroyed()) return
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return
+  panelWin.setPosition(Math.round(x), Math.round(y))
+})
 ipcMain.on("panel:setBounds", (_e, bounds) => {
   if (!panelWin || panelWin.isDestroyed() || !bounds) return
   const cur = panelWin.getBounds()
@@ -1572,6 +1577,9 @@ app.whenReady().then(() => {
     "*://*.doubleclick.net/*",
     "*://*.googleads.g.doubleclick.net/*",
     "*://*.googlesyndication.com/*",
+    "*://*.youtube.com/pagead/*",
+    "*://*.youtube.com/api/stats/ads*",
+    "*://*.youtube.com/get_midroll_info*",
     "*://*.google-analytics.com/*",
     "*://spclient.wg.spotify.com/ads/*",
     "*://spclient.wg.spotify.com/ad-logic/*",

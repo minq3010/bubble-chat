@@ -39,7 +39,8 @@ export default function FloatingBubble({
   const messengerCount = providerUnread?.messenger || 0
   const zaloCount = providerUnread?.zalo || 0
   const customCount = providerUnread?.custom || 0
-  const hasSplitBadges = showBadge && providerUnread && (messengerCount > 0 || zaloCount > 0)
+  const hasSplitBadges =
+    showBadge && providerUnread && (messengerCount > 0 || zaloCount > 0)
 
   return (
     <button
@@ -93,7 +94,9 @@ export default function FloatingBubble({
           {messengerCount > 0 && (
             <span
               className={`absolute flex items-center justify-center rounded-full border-[1.5px] border-white font-bold text-white shadow-md dark:border-background animate-scale-in select-none ${
-                messengerCount > 9 ? "h-[18px] min-w-[18px] px-1 text-[8px]" : "h-[18px] w-[18px] text-[9px]"
+                messengerCount > 9
+                  ? "h-[18px] min-w-[18px] px-1 text-[8px]"
+                  : "h-[18px] w-[18px] text-[9px]"
               }`}
               style={{
                 top: -3,
@@ -108,7 +111,9 @@ export default function FloatingBubble({
           {zaloCount > 0 && (
             <span
               className={`absolute flex items-center justify-center rounded-full border-[1.5px] border-white font-bold text-white shadow-md dark:border-background animate-scale-in select-none ${
-                zaloCount > 9 ? "h-[18px] min-w-[18px] px-1 text-[8px]" : "h-[18px] w-[18px] text-[9px]"
+                zaloCount > 9
+                  ? "h-[18px] min-w-[18px] px-1 text-[8px]"
+                  : "h-[18px] w-[18px] text-[9px]"
               }`}
               style={{
                 bottom: -3,
@@ -123,7 +128,9 @@ export default function FloatingBubble({
           {customCount > 0 && (
             <span
               className={`absolute flex items-center justify-center rounded-full border-[1.5px] border-white font-bold text-white shadow-md dark:border-background animate-scale-in select-none ${
-                customCount > 9 ? "h-[18px] min-w-[18px] px-1 text-[8px]" : "h-[18px] w-[18px] text-[9px]"
+                customCount > 9
+                  ? "h-[18px] min-w-[18px] px-1 text-[8px]"
+                  : "h-[18px] w-[18px] text-[9px]"
               }`}
               style={{
                 top: -3,
@@ -141,7 +148,9 @@ export default function FloatingBubble({
         showBadge && (
           <span
             className={`absolute -top-1 -right-1 flex items-center justify-center rounded-full border-2 border-white font-bold text-white shadow-md dark:border-background animate-scale-in select-none ${
-              unread > 9 ? "h-5 min-w-5 px-1 text-[10px]" : "h-5 w-5 text-[11px]"
+              unread > 9
+                ? "h-5 min-w-5 px-1 text-[10px]"
+                : "h-5 w-5 text-[11px]"
             }`}
             style={{ background: "var(--danger)" }}
           >

@@ -98,6 +98,7 @@ export type DesktopBridge = {
     width: number
     height: number
   } | null>
+  setPanelPosition?: (x: number, y: number) => void
   setPanelBounds?: (bounds: {
     x?: number
     y?: number

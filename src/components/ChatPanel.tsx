@@ -99,6 +99,7 @@ export default function ChatPanel({
   const isWide = panelSize.width >= 460
   const resizeToken = `${panelSize.width}x${panelSize.height}`
   const [panelVisible, setPanelVisible] = useState(false)
+  const [isPanelDragging, setIsPanelDragging] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const { updateInfo, openUpdateDownload } = useAppUpdate()
   const [storageWarning, setStorageWarning] =
@@ -249,7 +250,7 @@ export default function ChatPanel({
     })
   }, [performanceMode, visitedProviders, provider, customTab])
 
-  const handleHeaderMouseDown = useCallback(async (e: React.MouseEvent) => {
+  const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement
     if (
       target.closest("button, [role='button'], input, textarea, a, .no-drag")
@@ -260,23 +261,23 @@ export default function ChatPanel({
 
     e.preventDefault()
 
-    let startX = window.screenX
-    let startY = window.screenY
-    const curW = window.outerWidth || window.innerWidth
-    const curH = window.outerHeight || window.innerHeight
-
-    try {
-      const bounds = await desktop()?.getPanelBounds?.()
-      if (bounds) {
-        startX = bounds.x
-        startY = bounds.y
-      }
-    } catch {}
+    const startX = window.screenX
+    const startY = window.screenY
 
     const startScreenX = e.screenX
     const startScreenY = e.screenY
 
     let rafId: number | null = null
+    let pendingPosition: [number, number] | null = null
+
+    const flushPosition = () => {
+      rafId = null
+      if (!pendingPosition) return
+      desktop()?.setPanelPosition?.(pendingPosition[0], pendingPosition[1])
+      pendingPosition = null
+    }
+
+    setIsPanelDragging(true)
 
     const onMouseMove = (moveEvent: MouseEvent) => {
       const dx = moveEvent.screenX - startScreenX
@@ -284,27 +285,16 @@ export default function ChatPanel({
       const nextX = Math.round(startX + dx)
       const nextY = Math.round(startY + dy)
 
-      if (rafId) cancelAnimationFrame(rafId)
-      rafId = requestAnimationFrame(() => {
-        desktop()?.setPanelBounds?.({
-          x: nextX,
-          y: nextY,
-          width: curW,
-          height: curH,
-        })
-        if (
-          typeof window !== "undefined" &&
-          typeof window.moveTo === "function"
-        ) {
-          window.moveTo(nextX, nextY)
-        }
-      })
+      pendingPosition = [nextX, nextY]
+      if (!rafId) rafId = requestAnimationFrame(flushPosition)
     }
 
     const onMouseUp = () => {
       if (rafId) cancelAnimationFrame(rafId)
+      flushPosition()
       window.removeEventListener("mousemove", onMouseMove)
       window.removeEventListener("mouseup", onMouseUp)
+      setIsPanelDragging(false)
     }
 
     window.addEventListener("mousemove", onMouseMove)
@@ -748,6 +738,9 @@ export default function ChatPanel({
             {t("openFolder")}
           </button>
         </div>
+      )}
+      {isPanelDragging && (
+        <div className="fixed inset-0 z-[60] cursor-grabbing select-none" />
       )}
     </div>
   )

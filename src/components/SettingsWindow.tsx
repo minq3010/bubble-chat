@@ -2,22 +2,19 @@ import { useState, useEffect, useCallback } from "react"
 import {
   Settings2,
   Palette,
-  MousePointerClick,
-  Gauge,
-  Shield,
+  HardDrive,
   Info,
   Check,
-  Trash2,
   FolderOpen,
-  ChevronLeft,
-  ChevronRight,
   X,
   RotateCcw,
   LocateFixed,
   Copy,
   Languages,
-  HardDrive,
-  AlertTriangle,
+  Trash2,
+  ChevronDown,
+  Sparkles,
+  Zap,
 } from "lucide-react"
 import {
   AppIcon,
@@ -29,7 +26,6 @@ import {
   desktop,
   resetPanelPosition,
   resetPanelSize,
-  type MemoryMetricItem,
   type MemoryUsageResult,
   type StorageUsageResult,
 } from "../desktop/bridge"
@@ -37,7 +33,7 @@ import { useAppUpdate } from "../hooks/useAppUpdate"
 import { withTransitionSuppression } from "../utils/theme"
 import { useTranslation } from "../utils/i18n"
 
-export type Section = "general" | "appearance" | "behavior" | "performance" | "privacy" | "about"
+export type Section = "general" | "appearance" | "storage" | "about"
 
 function Toggle({
   on,
@@ -118,13 +114,13 @@ function ToggleRow({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 py-3">
+    <div className="flex items-center justify-between gap-3 py-2.5">
       <div className="min-w-0 flex-1 pr-1">
-        <div className="text-[13px] font-medium leading-tight text-foreground">
+        <div className="text-[12.5px] font-medium leading-tight text-foreground">
           {title}
         </div>
         {desc && (
-          <div className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
+          <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
             {desc}
           </div>
         )}
@@ -142,12 +138,12 @@ function Group({
   children: React.ReactNode
 }) {
   return (
-    <section className="mb-4">
-      <h3 className="mb-2 flex items-center gap-2 px-1 font-mono text-[10.5px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+    <section className="mb-3.5">
+      <h3 className="mb-1.5 flex items-center gap-2 px-1 font-mono text-[10.5px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
         <span>{title}</span>
         <span className="flex-1 h-px bg-border/40" />
       </h3>
-      <div className="divide-y divide-border/50 rounded-xl border border-border/70 bg-card px-4">
+      <div className="divide-y divide-border/50 rounded-xl border border-border/70 bg-card px-3.5">
         {children}
       </div>
     </section>
@@ -159,127 +155,65 @@ function Segmented({
   value,
   onChange,
 }: {
-  options: string[]
+  options: { id: string label: string }[]
   value: string
   onChange: (v: string) => void
 }) {
   return (
-    <div className="flex w-full items-center rounded-lg bg-muted/80 p-1">
-      {options.map((option) => (
+    <div className="flex w-full items-center rounded-lg bg-muted/80 p-0.5">
+      {options.map((opt) => (
         <button
-          key={option}
+          key={opt.id}
           type="button"
-          onClick={() => onChange(option)}
-          className={`flex-1 rounded-md py-1.5 text-center font-medium text-[12px] transition-all duration-200 cursor-pointer ${
-            value === option
-              ? "bg-card text-foreground shadow-sm"
+          onClick={() => onChange(opt.id)}
+          className={`flex-1 rounded-md py-1.5 text-center font-medium text-[11.5px] transition-all duration-200 cursor-pointer ${
+            value === opt.id
+              ? "bg-card text-foreground shadow-xs font-semibold"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          {option}
+          {opt.label}
         </button>
       ))}
     </div>
   )
 }
 
-function ActionRow({
-  icon,
-  title,
-  desc,
-  onClick,
-}: {
-  icon: React.ReactNode
-  title: string
-  desc?: string
-  onClick?: () => void
-}) {
-  const [done, setDone] = useState(false)
-
-  return (
-    <div className="flex items-center justify-between gap-3 py-2.5">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <div className="text-muted-foreground">{icon}</div>
-        <div>
-          <div className="text-[12.5px] font-medium text-foreground">
-            {title}
-          </div>
-          {desc && (
-            <div className="text-[11px] text-muted-foreground">{desc}</div>
-          )}
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={() => {
-          if (title.startsWith("Clear") && !window.confirm(`${title}?`)) {
-            return
-          }
-          onClick?.()
-          setDone(true)
-          setTimeout(() => setDone(false), 2000)
-        }}
-        className={`shrink-0 rounded-md border px-2 py-0.5 font-medium text-[11.5px] transition-colors ${
-          done
-            ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-500"
-            : "border-border bg-muted/60 text-foreground hover:bg-muted"
-        }`}
-      >
-        {done ? "Done" : "Run"}
-      </button>
-    </div>
-  )
+function getCustomTabName() {
+  try {
+    const raw = localStorage.getItem("bubble.customTab")
+    return raw ? JSON.parse(raw)?.name : null
+  } catch {
+    return null
+  }
 }
 
-function ShortcutRow({
-  label,
-  keys,
-  winKeys,
-}: {
-  label: string
-  keys: string
-  winKeys?: string
-}) {
+/* ==================== 1. General Pane ==================== */
+
+function GeneralPane() {
+  const { t } = useTranslation()
+  const [resetPosDone, setResetPosDone] = useState(false)
+  const [resetSizeDone, setResetSizeDone] = useState(false)
+
+  const handleResetPos = () => {
+    resetPanelPosition()
+    setResetPosDone(true)
+    setTimeout(() => setResetPosDone(false), 2000)
+  }
+
+  const handleResetSize = () => {
+    resetPanelSize()
+    setResetSizeDone(true)
+    setTimeout(() => setResetSizeDone(false), 2000)
+  }
+
   const isMac =
     desktop()?.platform === "darwin" ||
     (typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent))
-  const displayKeys = isMac ? keys : winKeys || keys
-  return (
-    <div className="flex items-center justify-between py-2.5">
-      <div className="text-[12.5px] font-medium text-foreground">{label}</div>
-      <kbd className="rounded border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-foreground/80">
-        {displayKeys}
-      </kbd>
-    </div>
-  )
-}
-
-/* ---------- Sub-pages ---------- */
-
-function GeneralPane() {
-  const { t, lang, setLanguage } = useTranslation()
 
   return (
-    <>
-      <Group title={t("language")}>
-        <div className="py-2.5">
-          <div className="mb-2">
-            <div className="text-[12.5px] font-medium leading-tight text-foreground">
-              {t("language")}
-            </div>
-            <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-              {t("languageDesc")}
-            </div>
-          </div>
-          <Segmented
-            options={["Tiếng Việt", "English"]}
-            value={lang === "vi" ? "Tiếng Việt" : "English"}
-            onChange={(val) => setLanguage(val === "Tiếng Việt" ? "vi" : "en")}
-          />
-        </div>
-      </Group>
-
-      <Group title={t("systemStartup")}>
+    <div className="space-y-3.5 animate-fade-in">
+      <Group title={t("windowBehavior")}>
         <ToggleRow
           title={t("startAtLogin")}
           settingKey="startAtLogin"
@@ -287,16 +221,9 @@ function GeneralPane() {
           defaultOn
         />
         <ToggleRow
-          title={t("showBubbleOnStartup")}
-          settingKey="showBubbleOnStartup"
-          defaultOn
-        />
-      </Group>
-
-      <Group title={t("windowBehavior")}>
-        <ToggleRow
-          title={t("rememberPosition")}
-          settingKey="rememberPosition"
+          title={t("alwaysOnTop")}
+          settingKey="alwaysOnTop"
+          desc={t("alwaysOnTopDesc")}
           defaultOn
         />
         <ToggleRow
@@ -310,22 +237,69 @@ function GeneralPane() {
           settingKey="closeOnBlur"
           defaultOn
         />
-        <ActionRow
-          icon={<LocateFixed size={14} />}
-          title={t("resetPanelPosition")}
-          desc={t("resetPanelPositionDesc")}
-          onClick={() => resetPanelPosition()}
-        />
-        <ActionRow
-          icon={<RotateCcw size={14} />}
-          title={t("resetPanelSize")}
-          desc={t("resetPanelSizeDesc")}
-          onClick={() => resetPanelSize()}
-        />
       </Group>
-    </>
+
+      <Group title={t("panelResetGroup")}>
+        <div className="py-2.5">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            {t("panelResetDesc")}
+          </p>
+          <div className="mt-2.5 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={handleResetPos}
+              className={`flex items-center justify-center gap-1.5 rounded-lg border py-1.5 px-2.5 text-[11.5px] font-medium transition-all active:scale-95 cursor-pointer ${
+                resetPosDone
+                  ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-500 font-semibold"
+                  : "border-border/80 bg-muted/60 text-foreground hover:bg-muted"
+              }`}
+            >
+              {resetPosDone ? <Check size={13} /> : <LocateFixed size={13} />}
+              <span>{resetPosDone ? t("done") : t("resetPosBtn")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleResetSize}
+              className={`flex items-center justify-center gap-1.5 rounded-lg border py-1.5 px-2.5 text-[11.5px] font-medium transition-all active:scale-95 cursor-pointer ${
+                resetSizeDone
+                  ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-500 font-semibold"
+                  : "border-border/80 bg-muted/60 text-foreground hover:bg-muted"
+              }`}
+            >
+              {resetSizeDone ? <Check size={13} /> : <RotateCcw size={13} />}
+              <span>{resetSizeDone ? t("done") : t("resetSizeBtn")}</span>
+            </button>
+          </div>
+        </div>
+      </Group>
+
+      <Group title={t("shortcuts")}>
+        <div className="divide-y divide-border/40 py-0.5 text-[11.5px]">
+          <div className="flex items-center justify-between py-2">
+            <span className="text-muted-foreground">{t("togglePanel")}</span>
+            <kbd className="rounded border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[10.5px] text-foreground/80">
+              {isMac ? "⌥ ⌘ B" : "Alt + Ctrl + B"}
+            </kbd>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <span className="text-muted-foreground">{t("openMessenger")}</span>
+            <kbd className="rounded border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[10.5px] text-foreground/80">
+              {isMac ? "⌥ ⌘ M" : "Alt + Ctrl + M"}
+            </kbd>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <span className="text-muted-foreground">{t("openZalo")}</span>
+            <kbd className="rounded border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[10.5px] text-foreground/80">
+              {isMac ? "⌥ ⌘ Z" : "Alt + Ctrl + Z"}
+            </kbd>
+          </div>
+        </div>
+      </Group>
+    </div>
   )
 }
+
+/* ==================== 2. Appearance Pane ==================== */
 
 function AppearancePane() {
   const { t } = useTranslation()
@@ -420,12 +394,24 @@ function AppearancePane() {
     )
   }
 
+  const themeOptions = [
+    { id: "System", label: t("themeSystem") },
+    { id: "Light", label: t("themeLight") },
+    { id: "Dark", label: t("themeDark") },
+  ]
+
+  const sizeOptions = [
+    { id: "Small", label: t("bubbleSizeSmall") },
+    { id: "Medium", label: t("bubbleSizeMedium") },
+    { id: "Large", label: t("bubbleSizeLarge") },
+  ]
+
   return (
-    <>
+    <div className="space-y-3.5 animate-fade-in">
       <Group title={t("themeMode")}>
         <div className="py-2.5">
           <Segmented
-            options={["System", "Light", "Dark"]}
+            options={themeOptions}
             value={theme}
             onChange={saveTheme}
           />
@@ -434,37 +420,7 @@ function AppearancePane() {
 
       <Group title={t("bubbleSize")}>
         <div className="py-2.5">
-          <Segmented
-            options={["Small", "Medium", "Large"]}
-            value={size}
-            onChange={saveSize}
-          />
-        </div>
-      </Group>
-
-      <Group title={t("bubbleOpacity")}>
-        <div className="space-y-2 py-2.5">
-          <label
-            htmlFor="bubble-opacity"
-            className="block text-[12px] font-medium text-foreground"
-          >
-            {t("bubbleOpacity")}
-          </label>
-          <div className="flex items-center gap-3">
-            <input
-              id="bubble-opacity"
-              type="range"
-              min="20"
-              max="100"
-              step="5"
-              value={opacity}
-              onChange={(event) => saveOpacity(Number(event.target.value))}
-              className="min-w-0 flex-1 accent-primary"
-            />
-            <span className="w-9 text-right font-mono text-[11px] text-muted-foreground">
-              {opacity}%
-            </span>
-          </div>
+          <Segmented options={sizeOptions} value={size} onChange={saveSize} />
         </div>
       </Group>
 
@@ -479,83 +435,79 @@ function AppearancePane() {
               )}
               aria-pressed={icon === name}
               onClick={() => saveIcon(name)}
-              className={`grid place-items-center rounded-lg border p-2 transition-all ${
+              className={`grid place-items-center rounded-lg border p-2 transition-all cursor-pointer ${
                 icon === name
-                  ? "border-primary bg-primary/10 ring-2 ring-primary/20"
-                  : "border-border/70 bg-muted/40 hover:bg-muted"
+                  ? "border-primary bg-primary/10 ring-2 ring-primary/20 scale-105"
+                  : "border-border/70 bg-muted/30 hover:bg-muted"
               }`}
             >
-              <BubbleIcon name={name} size={30} />
+              <BubbleIcon name={name} size={28} />
             </button>
           ))}
         </div>
       </Group>
-    </>
+
+      <Group title={t("bubbleOpacity")}>
+        <div className="py-2.5">
+          <div className="flex items-center justify-between text-[11px] mb-1.5">
+            <span className="text-muted-foreground">{t("bubbleOpacity")}</span>
+            <span className="font-mono font-medium text-foreground">
+              {opacity}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min="20"
+            max="100"
+            step="5"
+            value={opacity}
+            onChange={(e) => saveOpacity(Number(e.target.value))}
+            className="w-full accent-primary cursor-pointer"
+          />
+        </div>
+      </Group>
+    </div>
   )
 }
 
-function BehaviorPane() {
-  const { t } = useTranslation()
+/* ==================== 3. Storage & Performance Pane ==================== */
 
-  return (
-    <>
-      <Group title={t("windowBehavior")}>
-        <ToggleRow
-          title={t("alwaysOnTop")}
-          settingKey="alwaysOnTop"
-          desc={t("alwaysOnTopDesc")}
-          defaultOn
-        />
-      </Group>
-
-      <Group title={t("shortcuts")}>
-        <ShortcutRow
-          label={t("togglePanel")}
-          keys="⌥ ⌘ B"
-          winKeys="Alt + Ctrl + B"
-        />
-        <ShortcutRow
-          label={t("openMessenger")}
-          keys="⌥ ⌘ M"
-          winKeys="Alt + Ctrl + M"
-        />
-        <ShortcutRow
-          label={t("openZalo")}
-          keys="⌥ ⌘ Z"
-          winKeys="Alt + Ctrl + Z"
-        />
-      </Group>
-    </>
-  )
-}
-
-function PerformancePane() {
+function StoragePane() {
   const { t } = useTranslation()
   const [mode, setMode] = useState(
     () => localStorage.getItem("bubble.performanceMode") || "Balanced",
   )
   const [memory, setMemory] = useState<MemoryUsageResult | null>(null)
-  const [isRefreshingMemory, setIsRefreshingMemory] = useState(false)
+  const [storageUsage, setStorageUsage] = useState<StorageUsageResult | null>(
+    null,
+  )
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [cleaning, setCleaning] = useState(false)
+  const [cleanDone, setCleanDone] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const customTabName = getCustomTabName()
 
-  const fetchMemory = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const res = await desktop()?.getMemoryUsage?.()
-      if (res && typeof res.totalMB === "number") {
-        setMemory(res)
-      }
+      const [mem, stor] = await Promise.all([
+        desktop()?.getMemoryUsage?.(),
+        desktop()?.getStorageUsage?.(),
+      ])
+      if (mem && typeof mem.totalMB === "number") setMemory(mem)
+      if (stor) setStorageUsage(stor)
     } catch {}
   }, [])
 
   useEffect(() => {
-    void fetchMemory()
-    const timer = setInterval(() => void fetchMemory(), 4000)
+    void fetchData()
+    const timer = setInterval(() => void fetchData(), 10000)
     return () => clearInterval(timer)
-  }, [fetchMemory])
+  }, [fetchData])
 
-  const handleRefreshMemory = async () => {
-    setIsRefreshingMemory(true)
-    await fetchMemory()
-    setIsRefreshingMemory(false)
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    await fetchData()
+    setIsRefreshing(false)
   }
 
   const saveMode = (next: string) => {
@@ -569,267 +521,109 @@ function PerformancePane() {
     )
   }
 
+  const handleClearCache = async () => {
+    setCleaning(true)
+    try {
+      await desktop()?.clearSession("cache")
+      await desktop()?.clearCustomCache?.()
+      await fetchData()
+      setCleanDone(true)
+      setTimeout(() => setCleanDone(false), 2500)
+    } catch {}
+    setCleaning(false)
+  }
+
   const modes = [
     {
       id: "Balanced",
-      name: t("perfBalanced"),
+      label: t("perfBalanced"),
       desc: t("perfBalancedDesc"),
     },
     {
       id: "Low Memory",
-      name: t("perfLowMemory"),
+      label: t("perfLowMemory"),
       desc: t("perfLowMemoryDesc"),
     },
     {
       id: "Instant Switching",
-      name: t("perfInstant"),
+      label: t("perfInstant"),
       desc: t("perfInstantDesc"),
     },
   ]
 
-  const metricLabel = (metric: MemoryMetricItem) => {
-    if (metric.type === "Browser") return t("ramMainProcess")
-    if (metric.type === "Tab") return t("ramWebContent")
-    if (metric.type === "GPU") return t("ramGpu")
-    if (metric.type === "Utility") return metric.name || t("ramUtility")
-    return metric.type
-  }
-
   return (
-    <>
-      <div className="mb-3 rounded-xl border border-border/70 bg-card/60 p-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <Gauge size={18} className="text-primary shrink-0" />
-            <div>
-              <div className="text-[12px] font-medium text-foreground">
-                {t("ramUsage")}
-              </div>
-              <div className="mt-0.5 font-mono text-[15px] font-semibold text-foreground">
-                {memory ? `${memory.totalMB} MB` : "---"}
-              </div>
-              {memory?.processCount && (
-                <div className="text-[10.5px] text-muted-foreground">
-                  {t("ramProcessCount", { count: memory.processCount })}
-                </div>
-              )}
+    <div className="space-y-3.5 animate-fade-in">
+      {/* Overview RAM & Cache status */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-border/70 bg-card p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+              <Zap size={13} className="text-amber-500" />
+              {t("ramCurrent")}
+            </span>
+            <button
+              type="button"
+              disabled={isRefreshing}
+              onClick={handleRefresh}
+              className="text-muted-foreground hover:text-foreground active:scale-95 disabled:opacity-40 cursor-pointer"
+              title={t("refreshRam")}
+            >
+              <RotateCcw
+                size={11}
+                className={isRefreshing ? "animate-spin" : ""}
+              />
+            </button>
+          </div>
+          <div className="mt-1 font-mono text-[16px] font-semibold text-foreground">
+            {memory ? `${memory.totalMB} MB` : "---"}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border/70 bg-card p-3">
+          <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+            <HardDrive size={13} className="text-primary" />
+            {t("cacheSize")}
+          </span>
+          <div className="mt-1 font-mono text-[16px] font-semibold text-foreground">
+            {storageUsage ? `${storageUsage.totalMB} MB` : "---"}
+          </div>
+        </div>
+      </div>
+
+      {/* Primary Clean Cache Button */}
+      <div className="rounded-xl border border-border/70 bg-card p-3">
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="min-w-0 flex-1">
+            <div className="text-[12.5px] font-medium text-foreground">
+              {t("clearCacheOnly")}
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground leading-snug">
+              {t("clearWebCacheDesc")}
             </div>
           </div>
           <button
             type="button"
-            disabled={isRefreshingMemory}
-            onClick={handleRefreshMemory}
-            className="flex items-center gap-1.5 rounded-lg border border-border/80 bg-muted/80 px-2.5 py-1 text-[11.5px] font-medium text-foreground transition-all hover:bg-muted active:scale-95 disabled:opacity-50 cursor-pointer"
-          >
-            <RotateCcw
-              size={11}
-              className={isRefreshingMemory ? "animate-spin" : ""}
-            />
-            <span>{t("refreshRam")}</span>
-          </button>
-        </div>
-
-        {memory?.chatMB && (
-          <div className="mt-2 flex justify-between border-t border-border/50 pt-2 text-[11px]">
-            <span className="text-muted-foreground">
-              {t("ramBeforeSettings")}
-            </span>
-            <span className="font-mono font-medium text-foreground">
-              {memory.chatMB} MB
-            </span>
-          </div>
-        )}
-
-        {memory?.metrics && memory.metrics.length > 0 && (
-          <div className="mt-2 space-y-1 border-t border-border/50 pt-2">
-            {memory.metrics.map((metric, index) => (
-              <div
-                key={`${metric.type}-${metric.name || index}`}
-                className="flex justify-between text-[10.5px]"
-              >
-                <span className="truncate text-muted-foreground">
-                  {metricLabel(metric)}
-                </span>
-                <span className="ml-3 shrink-0 font-mono text-foreground/80">
-                  {metric.mb} MB
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <Group title={t("memoryModes")}>
-        {modes.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => saveMode(item.id)}
-            className="flex w-full items-start gap-3 py-2.5 text-left transition-colors hover:bg-muted/40 cursor-pointer"
-          >
-            <span
-              className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                mode === item.id
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-muted-foreground/40"
-              }`}
-            >
-              {mode === item.id && (
-                <span className="h-1.5 w-1.5 rounded-full bg-white" />
-              )}
-            </span>
-            <span>
-              <span className="block text-[12.5px] font-medium text-foreground">
-                {item.name}
-              </span>
-              <span className="mt-0.5 block text-[11px] leading-tight text-muted-foreground">
-                {item.desc}
-              </span>
-            </span>
-          </button>
-        ))}
-      </Group>
-    </>
-  )
-}
-
-function PrivacyPane() {
-  const { t } = useTranslation()
-  const [storageUsage, setStorageUsage] = useState<StorageUsageResult | null>(
-    null,
-  )
-  const [threshold, setThreshold] = useState<number>(500)
-  const [cleanSuccess, setCleanSuccess] = useState(false)
-
-  const customTabName = (() => {
-    try {
-      const raw = localStorage.getItem("bubble.customTab")
-      return raw ? JSON.parse(raw)?.name : null
-    } catch {
-      return null
-    }
-  })()
-
-  const loadStorage = useCallback(() => {
-    desktop()
-      ?.getStorageUsage?.()
-      .then((data) => {
-        if (data) {
-          setStorageUsage(data)
-          if (typeof data.warnThresholdMB === "number") {
-            setThreshold(data.warnThresholdMB)
-          }
-        }
-      })
-      .catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    loadStorage()
-  }, [loadStorage])
-
-  const handleSetThreshold = (val: number) => {
-    setThreshold(val)
-    desktop()?.setStorageThreshold?.(val)
-  }
-
-  const handleClearCustomCache = async () => {
-    try {
-      const updated = await desktop()?.clearCustomCache?.()
-      if (updated) setStorageUsage(updated)
-      setCleanSuccess(true)
-      setTimeout(() => setCleanSuccess(false), 2500)
-    } catch {}
-  }
-
-  const thresholdOptions = [
-    { label: t("threshold300"), value: 300 },
-    { label: t("threshold500"), value: 500 },
-    { label: t("threshold1000"), value: 1000 },
-    { label: t("threshold2000"), value: 2000 },
-    { label: t("thresholdOff"), value: 0 },
-  ]
-
-  return (
-    <>
-      <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-border/70 bg-accent/40 p-3">
-        <Shield size={16} className="mt-0.5 shrink-0 text-primary" />
-        <p className="text-[11.5px] leading-relaxed text-foreground/80">
-          {t("storageNotice")}
-        </p>
-      </div>
-
-      <Group title={t("storageTabUsage")}>
-        <div className="grid grid-cols-3 gap-2 p-1">
-          <div className="rounded-xl border border-border/60 bg-muted/30 p-2.5 text-center">
-            <span className="text-[11px] font-medium text-muted-foreground block truncate">
-              Messenger
-            </span>
-            <span className="text-sm font-semibold text-foreground mt-0.5 block">
-              {storageUsage ? `${storageUsage.messengerMB} MB` : "..."}
-            </span>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-muted/30 p-2.5 text-center">
-            <span className="text-[11px] font-medium text-muted-foreground block truncate">
-              Zalo
-            </span>
-            <span className="text-sm font-semibold text-foreground mt-0.5 block">
-              {storageUsage ? `${storageUsage.zaloMB} MB` : "..."}
-            </span>
-          </div>
-          <div
-            className={`rounded-xl border p-2.5 text-center transition-colors ${
-              storageUsage &&
-              threshold > 0 &&
-              storageUsage.customMB >= threshold
-                ? "border-amber-500/50 bg-amber-500/10"
-                : "border-border/60 bg-muted/30"
+            disabled={cleaning}
+            onClick={handleClearCache}
+            className={`shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-medium transition-all active:scale-95 cursor-pointer ${
+              cleanDone
+                ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/40"
+                : "bg-primary text-primary-foreground hover:opacity-90 shadow-xs"
             }`}
           >
-            <span className="text-[11px] font-medium text-muted-foreground block truncate">
-              {customTabName || "Tab 3"}
+            {cleanDone ? <Check size={13} /> : <Trash2 size={13} />}
+            <span>
+              {cleanDone
+                ? t("cleanCacheSuccess")
+                : cleaning
+                  ? t("cleaning")
+                  : t("cleanCacheNow")}
             </span>
-            <span className="text-sm font-semibold text-foreground mt-0.5 flex items-center justify-center gap-1">
-              {storageUsage ? `${storageUsage.customMB} MB` : "..."}
-              {storageUsage &&
-                threshold > 0 &&
-                storageUsage.customMB >= threshold && (
-                  <AlertTriangle size={13} className="text-amber-400" />
-                )}
-            </span>
-          </div>
+          </button>
         </div>
+      </div>
 
-        <div className="px-3 py-2 border-t border-border/40 mt-1">
-          <div className="flex items-center justify-between mb-1.5">
-            <div>
-              <span className="text-xs font-medium text-foreground block">
-                {t("storageThreshold")}
-              </span>
-              <span className="text-[11px] text-muted-foreground block">
-                {t("storageThresholdDesc")}
-              </span>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {thresholdOptions.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => handleSetThreshold(opt.value)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
-                  threshold === opt.value
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </Group>
-
+      {/* Content & Ads */}
       <Group title={t("contentAndAds")}>
         <ToggleRow
           title={t("blockAds")}
@@ -839,51 +633,123 @@ function PrivacyPane() {
         />
       </Group>
 
-      <Group title={t("storageAndCache")}>
-        {customTabName && (
-          <ActionRow
-            icon={<HardDrive size={14} />}
-            title={t("clearCustomCacheOnly", { name: customTabName })}
-            desc={
-              cleanSuccess
-                ? t("cacheClearedSuccess")
-                : t("clearCustomCacheOnlyDesc")
-            }
-            onClick={handleClearCustomCache}
-          />
-        )}
-        <ActionRow
-          icon={<Trash2 size={14} />}
-          title={t("clearMessengerSession")}
-          onClick={() => desktop()?.clearSession("messenger")}
-        />
-        <ActionRow
-          icon={<Trash2 size={14} />}
-          title={t("clearZaloSession")}
-          onClick={() => desktop()?.clearSession("zalo")}
-        />
-        {customTabName && (
-          <ActionRow
-            icon={<Trash2 size={14} />}
-            title={t("clearCustomSession", { name: customTabName })}
-            onClick={() => desktop()?.clearSession("custom")}
-          />
-        )}
-        <ActionRow
-          icon={<Trash2 size={14} />}
-          title={t("clearWebCache")}
-          desc={t("clearWebCacheDesc")}
-          onClick={() => desktop()?.clearSession("cache")}
-        />
-        <ActionRow
-          icon={<FolderOpen size={14} />}
-          title={t("openSessionFolder")}
-          onClick={() => desktop()?.openSessionStorage()}
-        />
+      {/* Performance modes */}
+      <Group title={t("memoryModes")}>
+        <div className="py-2 space-y-1.5">
+          {modes.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => saveMode(item.id)}
+              className={`flex w-full items-start gap-2.5 rounded-lg p-2 text-left transition-all cursor-pointer ${
+                mode === item.id
+                  ? "bg-primary/10 border border-primary/30"
+                  : "hover:bg-muted/40 border border-transparent"
+              }`}
+            >
+              <span
+                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                  mode === item.id
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-muted-foreground/40"
+                }`}
+              >
+                {mode === item.id && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12px] font-medium text-foreground">
+                  {item.label}
+                </span>
+                <span className="mt-0.5 block text-[10.5px] leading-tight text-muted-foreground">
+                  {item.desc}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
       </Group>
-    </>
+
+      {/* Advanced expandable section for session logout & open folder */}
+      <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((prev) => !prev)}
+          className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-[11.5px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        >
+          <span>{t("advancedStorage")}</span>
+          <ChevronDown
+            size={14}
+            className={`transition-transform duration-200 ${
+              showAdvanced ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+
+        {showAdvanced && (
+          <div className="border-t border-border/50 divide-y divide-border/40 px-3.5 py-1 text-[11.5px] animate-fade-in">
+            <button
+              type="button"
+              onClick={() => desktop()?.openSessionStorage()}
+              className="flex w-full items-center gap-2 py-2 text-foreground/80 hover:text-primary transition-colors cursor-pointer"
+            >
+              <FolderOpen size={13} className="text-muted-foreground" />
+              <span>{t("openSessionFolder")}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(t("clearMessengerSession") + "?")) {
+                  desktop()?.clearSession("messenger")
+                }
+              }}
+              className="flex w-full items-center gap-2 py-2 text-danger hover:underline cursor-pointer"
+            >
+              <Trash2 size={13} />
+              <span>{t("clearMessengerSession")}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(t("clearZaloSession") + "?")) {
+                  desktop()?.clearSession("zalo")
+                }
+              }}
+              className="flex w-full items-center gap-2 py-2 text-danger hover:underline cursor-pointer"
+            >
+              <Trash2 size={13} />
+              <span>{t("clearZaloSession")}</span>
+            </button>
+
+            {customTabName && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      t("clearCustomSession", { name: customTabName }) + "?",
+                    )
+                  ) {
+                    desktop()?.clearSession("custom")
+                  }
+                }}
+                className="flex w-full items-center gap-2 py-2 text-danger hover:underline cursor-pointer"
+              >
+                <Trash2 size={13} />
+                <span>{t("clearCustomSession", { name: customTabName })}</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
+
+/* ==================== 4. About Pane ==================== */
 
 function formatRemainingDetailed(seconds: number, lang: "vi" | "en"): string {
   const safeSec = Math.max(0, Math.floor(seconds))
@@ -901,28 +767,6 @@ function formatRemainingDetailed(seconds: number, lang: "vi" | "en"): string {
   return `${s}s`
 }
 
-function formatRemainingShort(seconds: number, lang: "vi" | "en"): string {
-  const safeSec = Math.max(0, Math.floor(seconds))
-  const h = Math.floor(safeSec / 3600)
-  const m = Math.floor((safeSec % 3600) / 60)
-
-  if (lang === "vi") {
-    if (h > 0) return `${h}g ${m}p`
-    return `${m}p`
-  }
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
-}
-
-type AboutPaneProps = {
-  version: string
-  remainingSeconds?: number
-  updateInfo: ReturnType<typeof useAppUpdate>["updateInfo"]
-  checkForUpdates: () => Promise<void>
-  installUpdate: () => Promise<unknown> | undefined
-  openUpdateDownload: () => Promise<void> | undefined
-}
-
 function AboutPane({
   version,
   remainingSeconds,
@@ -930,29 +774,35 @@ function AboutPane({
   checkForUpdates,
   installUpdate,
   openUpdateDownload,
-}: AboutPaneProps) {
+}: {
+  version: string
+  remainingSeconds?: number
+  updateInfo: ReturnType<typeof useAppUpdate>["updateInfo"]
+  checkForUpdates: () => Promise<void>
+  installUpdate: () => Promise<unknown> | undefined
+  openUpdateDownload: () => Promise<void> | undefined
+}) {
   const { t, lang } = useTranslation()
   const [copied, setCopied] = useState(false)
-  const electron = "44.2.0"
-  const chromium = "152.0.7977.76"
   const updateInProgress =
     updateInfo.status === "downloading" || updateInfo.status === "installing"
 
   return (
-    <>
-      <div className="mb-3 flex flex-col items-center rounded-xl border border-border/70 bg-card/60 p-4 text-center">
-        <AppIcon size={44} round className="shadow-e2" />
+    <div className="space-y-3.5 animate-fade-in">
+      <div className="flex flex-col items-center rounded-xl border border-border/70 bg-card p-4 text-center">
+        <AppIcon size={46} round className="shadow-e2" />
         <h3 className="mt-2 font-semibold text-[15px] text-foreground">
           Bubble Chat
         </h3>
-        <div className="font-mono text-[10.5px] text-muted-foreground">
-          Messenger + Zalo Desktop
+        <div className="font-mono text-[11px] text-muted-foreground">
+          v{version} • Messenger & Zalo
         </div>
+
         <button
           type="button"
           onClick={() => void checkForUpdates()}
           disabled={updateInfo.status === "checking" || updateInProgress}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-3 py-1.5 font-medium text-[11.5px] text-foreground transition-all hover:bg-muted active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-3 py-1.5 font-medium text-[11.5px] text-foreground transition-all hover:bg-muted active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
         >
           <RotateCcw
             size={12}
@@ -968,6 +818,7 @@ function AboutPane({
                   ? t("upToDate", { version })
                   : t("checkUpdates")}
         </button>
+
         {updateInfo.status === "available" && (
           <div className="mt-2.5 flex flex-col items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-[11.5px] font-medium text-emerald-500">
             <div>
@@ -986,11 +837,6 @@ function AboutPane({
             >
               {updateInfo.downloadUrl ? t("downloadUpdate") : t("viewRelease")}
             </button>
-            {updateInfo.releaseNotes && (
-              <p className="mt-1 max-h-16 overflow-y-auto whitespace-pre-line text-left font-normal text-muted-foreground text-[10.5px]">
-                {updateInfo.releaseNotes}
-              </p>
-            )}
           </div>
         )}
         {updateInfo.status === "error" && (
@@ -998,42 +844,24 @@ function AboutPane({
         )}
       </div>
 
-      <Group title={t("environment")}>
-        <div className="flex items-center justify-between py-2 text-[12px]">
-          <span className="text-muted-foreground">{t("appVersion")}</span>
-          <span className="font-mono text-[11px] text-foreground">
-            {version}
-          </span>
-        </div>
-        {typeof remainingSeconds === "number" && (
-          <div className="flex items-center justify-between py-2 text-[12px]">
+      {typeof remainingSeconds === "number" && (
+        <Group title={t("environment")}>
+          <div className="flex items-center justify-between py-2.5 text-[12px]">
             <span
               className="text-muted-foreground"
               title={t("sessionRemainingDesc")}
             >
               {t("sessionRemaining")}
             </span>
-            <span className="font-mono text-[11px] text-foreground/80">
+            <span className="font-mono text-[11px] font-medium text-foreground">
               {formatRemainingDetailed(remainingSeconds, lang)}
             </span>
           </div>
-        )}
-        <div className="flex items-center justify-between py-2 text-[12px]">
-          <span className="text-muted-foreground">Electron</span>
-          <span className="font-mono text-[11px] text-foreground">
-            {electron}
-          </span>
-        </div>
-        <div className="flex items-center justify-between py-2 text-[12px]">
-          <span className="text-muted-foreground">Chromium</span>
-          <span className="font-mono text-[11px] text-foreground">
-            {chromium}
-          </span>
-        </div>
-      </Group>
+        </Group>
+      )}
 
       <Group title={t("developer")}>
-        <div className="flex items-center justify-between gap-3 py-2">
+        <div className="flex items-center justify-between gap-3 py-2.5">
           <div>
             <div className="text-[12px] font-medium text-foreground">
               Nguyen Minh Quoc
@@ -1049,22 +877,22 @@ function AboutPane({
               setCopied(true)
               window.setTimeout(() => setCopied(false), 1500)
             }}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 active:scale-95 cursor-pointer"
           >
-            {copied ? <Check size={13} /> : <Copy size={13} />}{" "}
+            {copied ? <Check size={12} /> : <Copy size={12} />}{" "}
             {copied ? t("copied") : t("copy")}
           </button>
         </div>
       </Group>
-    </>
+    </div>
   )
 }
 
-/* ---------- Main Component ---------- */
+/* ==================== Main Settings Component ==================== */
 
 export default function SettingsWindow({ onClose }: { onClose: () => void }) {
   const { t, lang, setLanguage } = useTranslation()
-  const [section, setSection] = useState<Section | null>(null)
+  const [activeTab, setActiveTab] = useState<Section>("general")
   const [remainingSeconds, setRemainingSeconds] = useState<number | undefined>()
   const { updateInfo, checkForUpdates, installUpdate, openUpdateDownload } =
     useAppUpdate()
@@ -1113,120 +941,51 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
     }
   }, [])
 
-  const sections: Array<{
+  const tabs: Array<{
     id: Section
     label: string
-    desc: string
     icon: typeof Settings2
-    accent: string
+    badge?: boolean
   }> = [
     {
       id: "general",
-      label: t("general"),
-      desc: t("generalDesc"),
+      label: t("tabGeneral"),
       icon: Settings2,
-      accent: "bg-blue-500/15 text-blue-500",
     },
     {
       id: "appearance",
-      label: t("appearance"),
-      desc: t("appearanceDesc"),
+      label: t("tabAppearance"),
       icon: Palette,
-      accent: "bg-purple-500/15 text-purple-500",
     },
     {
-      id: "behavior",
-      label: t("behavior"),
-      desc: t("behaviorDesc"),
-      icon: MousePointerClick,
-      accent: "bg-amber-500/15 text-amber-500",
-    },
-    {
-      id: "performance",
-      label: t("performance"),
-      desc: t("performanceDesc"),
-      icon: Gauge,
-      accent: "bg-emerald-500/15 text-emerald-500",
-    },
-    {
-      id: "privacy",
-      label: t("privacy"),
-      desc: t("privacyDesc"),
-      icon: Shield,
-      accent: "bg-teal-500/15 text-teal-500",
+      id: "storage",
+      label: t("tabStorage"),
+      icon: HardDrive,
     },
     {
       id: "about",
-      label: t("about"),
-      desc: t("aboutDesc"),
+      label: t("tabAbout"),
       icon: Info,
-      accent: "bg-slate-500/15 text-slate-500 dark:text-slate-400",
+      badge: updateInfo.status === "available",
     },
   ]
 
-  const activeMeta = sections.find((s) => s.id === section)
-
-  const renderContent = () => {
-    switch (section) {
-      case "general":
-        return <GeneralPane />
-      case "appearance":
-        return <AppearancePane />
-      case "behavior":
-        return <BehaviorPane />
-      case "performance":
-        return <PerformancePane />
-      case "privacy":
-        return <PrivacyPane />
-      case "about":
-        return (
-          <AboutPane
-            version={version}
-            remainingSeconds={remainingSeconds}
-            updateInfo={updateInfo}
-            checkForUpdates={checkForUpdates}
-            installUpdate={installUpdate}
-            openUpdateDownload={openUpdateDownload}
-          />
-        )
-      default:
-        return null
-    }
-  }
-
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-panel">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-panel select-none">
       {/* Header */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/50 bg-card/60 px-3.5 select-none">
-        {section ? (
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setSection(null)}
-              className="flex items-center gap-0.5 rounded-lg px-2 py-1.5 font-medium text-[13px] text-primary transition-all hover:bg-muted active:scale-95 cursor-pointer"
-            >
-              <ChevronLeft size={18} />
-              <span>{t("back")}</span>
-            </button>
-            <span className="text-border-strong">/</span>
-            <span className="truncate font-semibold text-[14px] text-foreground">
-              {activeMeta?.label}
-            </span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <AppIcon size={18} />
-            <span className="font-semibold text-[14px] text-foreground">
-              {t("settings")}
-            </span>
-          </div>
-        )}
+      <header className="flex h-11 shrink-0 items-center justify-between border-b border-border/50 bg-card/60 px-3.5">
+        <div className="flex items-center gap-2">
+          <AppIcon size={18} />
+          <span className="font-semibold text-[13.5px] text-foreground">
+            {t("settings")}
+          </span>
+        </div>
 
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => setLanguage(lang === "vi" ? "en" : "vi")}
-            className="flex items-center gap-1 rounded-lg border border-border/70 bg-card/60 px-2.5 py-1 font-mono text-[11.5px] font-semibold text-foreground/80 hover:bg-muted transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-1 rounded-lg border border-border/70 bg-card/60 px-2 py-1 font-mono text-[11px] font-semibold text-foreground/80 hover:bg-muted transition-all active:scale-95 cursor-pointer"
             title={
               lang === "vi" ? "Switch to English" : "Chuyển sang Tiếng Việt"
             }
@@ -1237,71 +996,72 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={onClose}
-            className="flex items-center gap-1 rounded-lg bg-muted/80 px-3 py-1.5 font-medium text-[12px] text-foreground transition-all hover:bg-border active:scale-95 cursor-pointer"
+            className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted/80 text-foreground transition-all hover:bg-border active:scale-95 cursor-pointer"
+            aria-label={t("done")}
           >
-            <span>{t("done")}</span>
-            <X size={13} className="opacity-70" />
+            <X size={15} />
           </button>
         </div>
       </header>
 
-      {/* Main body area */}
+      {/* Clean Top Tab Navigation Bar */}
+      <nav className="flex shrink-0 border-b border-border/50 bg-card/30 p-1.5 gap-1">
+        {tabs.map((tab) => {
+          const Icon = tab.icon
+          const isActive = activeTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 px-2 text-[12px] font-medium transition-all duration-150 cursor-pointer ${
+                isActive
+                  ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <Icon
+                size={14}
+                className={isActive ? "text-primary-foreground" : "opacity-75"}
+              />
+              <span>{tab.label}</span>
+              {tab.badge && (
+                <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-danger ring-2 ring-background animate-pulse-dot" />
+              )}
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* Main Content Area */}
       <div className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3">
-        {section === null ? (
-          <div className="space-y-1.5 stagger-children">
-            {sections.map((item) => {
-              const Icon = item.icon
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setSection(item.id)}
-                  className="group flex w-full items-center gap-3 rounded-xl border border-border/40 bg-card/50 px-3.5 py-3 text-left transition-all duration-200 hover:border-border/80 hover:bg-card hover:-translate-y-[1px] hover:shadow-e1 active:scale-[0.99] active:translate-y-0 animate-fade-in cursor-pointer"
-                >
-                  <div
-                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${item.accent}`}
-                  >
-                    <Icon size={18} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium text-[13.5px] text-foreground group-hover:text-primary transition-colors">
-                      {item.label}
-                      {item.id === "about" &&
-                        updateInfo.status === "available" && (
-                          <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-danger align-middle animate-pulse-dot" />
-                        )}
-                    </div>
-                    <div className="truncate text-[11.5px] text-muted-foreground">
-                      {item.desc}
-                    </div>
-                  </div>
-                  <ChevronRight
-                    size={16}
-                    className="shrink-0 text-muted-foreground/50 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-muted-foreground"
-                  />
-                </button>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="animate-slide-in-right">{renderContent()}</div>
+        {activeTab === "general" && <GeneralPane />}
+        {activeTab === "appearance" && <AppearancePane />}
+        {activeTab === "storage" && <StoragePane />}
+        {activeTab === "about" && (
+          <AboutPane
+            version={version}
+            remainingSeconds={remainingSeconds}
+            updateInfo={updateInfo}
+            checkForUpdates={checkForUpdates}
+            installUpdate={installUpdate}
+            openUpdateDownload={openUpdateDownload}
+          />
         )}
       </div>
 
-      {/* Footer info in root */}
-      {section === null && (
-        <div className="flex items-center justify-between border-t border-border/40 bg-card/30 px-3.5 py-2 font-mono text-[10px] text-muted-foreground">
-          <span>Bubble Chat v{version}</span>
-          {typeof remainingSeconds === "number" && (
-            <span
-              className="opacity-75 transition-opacity hover:opacity-100 cursor-default"
-              title={`${t("sessionRemaining")}: ${formatRemainingDetailed(remainingSeconds, lang)}`}
-            >
-              {formatRemainingShort(remainingSeconds, lang)}
-            </span>
-          )}
-        </div>
-      )}
+      {/* Subtle Footer */}
+      <footer className="flex shrink-0 items-center justify-between border-t border-border/40 bg-card/30 px-3.5 py-1.5 font-mono text-[10px] text-muted-foreground">
+        <span>Bubble Chat v{version}</span>
+        {typeof remainingSeconds === "number" && (
+          <span
+            className="opacity-75 transition-opacity hover:opacity-100 cursor-default"
+            title={`${t("sessionRemaining")}: ${formatRemainingDetailed(remainingSeconds, lang)}`}
+          >
+            {formatRemainingDetailed(remainingSeconds, lang)}
+          </span>
+        )}
+      </footer>
     </div>
   )
 }

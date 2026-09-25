@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld("desktop", {
   resetPanelPosition: () => ipcRenderer.send("panel:resetPosition"),
   resetPanelSize: () => ipcRenderer.send("panel:resetSize"),
   getPanelBounds: () => ipcRenderer.invoke("panel:getBounds"),
+  setPanelPosition: (x, y) => ipcRenderer.send("panel:setPosition", x, y),
   setPanelBounds: (bounds) => ipcRenderer.send("panel:setBounds", bounds),
   openExternal: (url) => ipcRenderer.send("open:external", url),
   setLoginItem: (enabled) => ipcRenderer.send("settings:login", enabled),

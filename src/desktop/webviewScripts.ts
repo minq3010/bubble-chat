@@ -311,11 +311,13 @@ export const AD_BLOCK_SCRIPT = `(() => {
   const isSpotify = location.hostname.includes("spotify.com");
 
   if (isYouTube) {
-    let adActive = false;
-    let wasMutedBeforeAd = false;
     let userPaused = false;
     let lastKnownVideoId = "";
     let trackedVideo = null;
+    let observedPlayer = null;
+    let playerObserver = null;
+    let adCheckTimer = null;
+    let adMediaState = null;
 
     function getVideoId() {
       const m = location.search.match(/[?&]v=([^&]+)/);
@@ -335,14 +337,8 @@ export const AD_BLOCK_SCRIPT = `(() => {
         document.querySelector(".ad-showing, .ad-interrupting, .ytp-ad-showing")
       );
 
-      // If ad is playing, let ad accelerator finish it without forcing main video play
+      // Don't force the main video to play while an ad is active.
       if (isAd) return;
-
-      // Auto-enable autonav (autoplay next video) so YouTube automatically queues the next song
-      const autonavToggle = document.querySelector(".ytp-autonav-toggle-button");
-      if (autonavToggle && autonavToggle.getAttribute("aria-checked") === "false") {
-        autonavToggle.click();
-      }
 
       // Check player state: -1 (unstarted), 2 (paused), 5 (video cued)
       let pState = null;
@@ -368,15 +364,34 @@ export const AD_BLOCK_SCRIPT = `(() => {
       }
     }
 
+    function observePlayer(player) {
+      if (!player || player === observedPlayer) return;
+      playerObserver?.disconnect();
+      observedPlayer = player;
+      playerObserver = new MutationObserver(() => {
+        if (adCheckTimer) return;
+        adCheckTimer = setTimeout(() => {
+          adCheckTimer = null;
+          handleYouTube();
+        }, 100);
+      });
+      playerObserver.observe(player, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    }
+
     function handleYouTube() {
       try {
         const player = document.querySelector("#movie_player, .html5-video-player");
         const video = document.querySelector("video");
+        observePlayer(player);
 
         if (video && video !== trackedVideo) {
           trackedVideo = video;
           video.addEventListener("loadedmetadata", () => {
-            userPaused = false;
             for (const delay of [100, 500, 1200]) {
               setTimeout(handleYouTube, delay);
             }
@@ -421,33 +436,20 @@ export const AD_BLOCK_SCRIPT = `(() => {
               break;
             }
           }
-        }
-
-        // 4. Handle ad acceleration WITHOUT mutating video.currentTime
-        if (video) {
-          if (isAdShowing) {
-            if (!adActive) {
-              adActive = true;
-              wasMutedBeforeAd = video.muted;
+          if (video) {
+            if (!adMediaState) {
+              adMediaState = { muted: video.muted, playbackRate: video.playbackRate };
             }
             video.muted = true;
-            video.playbackRate = 16.0;
-          } else if (adActive) {
-            // Ad just completed: restore speed, unmute, and resume
-            adActive = false;
-            video.playbackRate = 1.0;
-            video.muted = wasMutedBeforeAd;
-            ensurePlaying();
-          } else if (video.playbackRate > 2.0 && !isAdShowing) {
-            video.playbackRate = 1.0;
-            video.muted = wasMutedBeforeAd;
+            video.playbackRate = 16;
           }
+        } else if (video && adMediaState) {
+          video.muted = adMediaState.muted;
+          video.playbackRate = adMediaState.playbackRate;
+          adMediaState = null;
         }
 
-        // 5. Ensure continuous playback on watch page
-        ensurePlaying();
-
-        // 6. Auto-dismiss "Video paused. Continue watching?" dialogs
+        // 4. Auto-dismiss "Video paused. Continue watching?" dialogs
         const confirmBtn = document.querySelector(
           "yt-confirm-dialog-renderer #confirm-button button, ytd-popup-container #confirm-button button"
         );
@@ -456,7 +458,7 @@ export const AD_BLOCK_SCRIPT = `(() => {
           ensurePlaying();
         }
 
-        // 7. Dismiss anti-adblock enforcement dialogs
+        // 5. Dismiss anti-adblock enforcement dialogs
         const dialog = document.querySelector("tp-yt-paper-dialog:has(ytd-enforcement-message-view-model), ytd-enforcement-message-view-model");
         if (dialog) {
           dialog.remove();
@@ -472,14 +474,12 @@ export const AD_BLOCK_SCRIPT = `(() => {
       } catch {}
     }
 
-    // Track user deliberate pause via mouse click or keyboard
+    // Record user pause before YouTube changes the media state.
     document.addEventListener("click", (e) => {
-      const playBtn = e.target.closest(".ytp-play-button");
-      if (playBtn) {
-        setTimeout(() => {
-          const v = document.querySelector("video");
-          if (v) userPaused = v.paused;
-        }, 150);
+      const target = e.target;
+      if (target instanceof Element && target.closest(".ytp-play-button, video")) {
+        const video = document.querySelector("video");
+        if (video) userPaused = !video.paused;
       }
     }, true);
 
@@ -487,26 +487,21 @@ export const AD_BLOCK_SCRIPT = `(() => {
       if (e.code === "Space" || e.key === "k" || e.key === "K") {
         const el = document.activeElement;
         if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
-        setTimeout(() => {
-          const v = document.querySelector("video");
-          if (v) userPaused = v.paused;
-        }, 150);
+        const video = document.querySelector("video");
+        if (video) userPaused = !video.paused;
       }
     }, true);
 
+    handleYouTube();
     setInterval(handleYouTube, 1500);
 
     const recheckDelays = [100, 500, 1500];
     function triggerRecheck() {
-      userPaused = false;
       for (const d of recheckDelays) {
         setTimeout(handleYouTube, d);
       }
     }
 
-    window.addEventListener("yt-navigate-start", () => {
-      userPaused = false;
-    });
     window.addEventListener("yt-navigate-finish", triggerRecheck);
     window.addEventListener("yt-page-data-updated", triggerRecheck);
   }

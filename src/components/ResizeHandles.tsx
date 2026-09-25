@@ -11,8 +11,12 @@ interface ResizeHandlesProps {
 export default function ResizeHandles({ children }: ResizeHandlesProps) {
   const { t } = useTranslation()
   const [isResizing, setIsResizing] = useState(false)
-  const [activeDirection, setActiveDirection] = useState<ResizeDirection | null>(null)
-  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null)
+  const [activeDirection, setActiveDirection] =
+    useState<ResizeDirection | null>(null)
+  const [dimensions, setDimensions] = useState<{
+    width: number
+    height: number
+  } | null>(null)
   const [showPill, setShowPill] = useState(false)
   const pillTimerRef = useRef<number | null>(null)
 
@@ -92,14 +96,20 @@ export default function ResizeHandles({ children }: ResizeHandlesProps) {
 
         if (rafId) cancelAnimationFrame(rafId)
         rafId = requestAnimationFrame(() => {
-          setDimensions({ width: Math.round(nextWidth), height: Math.round(nextHeight) })
+          setDimensions({
+            width: Math.round(nextWidth),
+            height: Math.round(nextHeight),
+          })
           desktop()?.setPanelBounds?.({
             x: Math.round(nextX),
             y: Math.round(nextY),
             width: Math.round(nextWidth),
             height: Math.round(nextHeight),
           })
-          if (typeof window !== "undefined" && typeof window.resizeTo === "function") {
+          if (
+            typeof window !== "undefined" &&
+            typeof window.resizeTo === "function"
+          ) {
             window.resizeTo(Math.round(nextWidth), Math.round(nextHeight))
           }
         })
@@ -124,62 +134,71 @@ export default function ResizeHandles({ children }: ResizeHandlesProps) {
     [],
   )
 
-  const handleToggleWideMode = useCallback(async (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleToggleWideMode = useCallback(
+    async (e: React.MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
 
-    const currentW = window.outerWidth || window.innerWidth
+      const currentW = window.outerWidth || window.innerWidth
 
-    // If currently Wide, return to default Compact size AND default position beside bubble
-    if (currentW >= 420) {
-      if (typeof window !== "undefined" && typeof window.resizeTo === "function") {
-        window.resizeTo(260, 370)
+      // If currently Wide, return to default Compact size AND default position beside bubble
+      if (currentW >= 420) {
+        if (
+          typeof window !== "undefined" &&
+          typeof window.resizeTo === "function"
+        ) {
+          window.resizeTo(260, 370)
+        }
+        desktop()?.setPanelBounds?.({ width: 260, height: 370 })
+        resetPanelPosition()
+        setDimensions({ width: 260, height: 370 })
+        setShowPill(true)
+        if (pillTimerRef.current) window.clearTimeout(pillTimerRef.current)
+        pillTimerRef.current = window.setTimeout(() => {
+          setShowPill(false)
+          pillTimerRef.current = null
+        }, 1200)
+        return
       }
-      desktop()?.setPanelBounds?.({ width: 260, height: 370 })
-      resetPanelPosition()
-      setDimensions({ width: 260, height: 370 })
+
+      // Otherwise, expand to Wide (580x640)
+      const targetWidth = 580
+      const targetHeight = 640
+
+      try {
+        const bounds = await desktop()?.getPanelBounds?.()
+        const x = bounds?.x ?? window.screenX
+        const y = bounds?.y ?? window.screenY
+        desktop()?.setPanelBounds?.({
+          x: Math.max(10, x - (targetWidth - currentW)),
+          y,
+          width: targetWidth,
+          height: targetHeight,
+        })
+      } catch {
+        desktop()?.setPanelBounds?.({
+          width: targetWidth,
+          height: targetHeight,
+        })
+      }
+
+      if (
+        typeof window !== "undefined" &&
+        typeof window.resizeTo === "function"
+      ) {
+        window.resizeTo(targetWidth, targetHeight)
+      }
+
+      setDimensions({ width: targetWidth, height: targetHeight })
       setShowPill(true)
       if (pillTimerRef.current) window.clearTimeout(pillTimerRef.current)
       pillTimerRef.current = window.setTimeout(() => {
         setShowPill(false)
         pillTimerRef.current = null
       }, 1200)
-      return
-    }
-
-    // Otherwise, expand to Wide (580x640)
-    const targetWidth = 580
-    const targetHeight = 640
-
-    try {
-      const bounds = await desktop()?.getPanelBounds?.()
-      const x = bounds?.x ?? window.screenX
-      const y = bounds?.y ?? window.screenY
-      desktop()?.setPanelBounds?.({
-        x: Math.max(10, x - (targetWidth - currentW)),
-        y,
-        width: targetWidth,
-        height: targetHeight,
-      })
-    } catch {
-      desktop()?.setPanelBounds?.({
-        width: targetWidth,
-        height: targetHeight,
-      })
-    }
-
-    if (typeof window !== "undefined" && typeof window.resizeTo === "function") {
-      window.resizeTo(targetWidth, targetHeight)
-    }
-
-    setDimensions({ width: targetWidth, height: targetHeight })
-    setShowPill(true)
-    if (pillTimerRef.current) window.clearTimeout(pillTimerRef.current)
-    pillTimerRef.current = window.setTimeout(() => {
-      setShowPill(false)
-      pillTimerRef.current = null
-    }, 1200)
-  }, [])
+    },
+    [],
+  )
 
   const cursorClassMap: Record<ResizeDirection, string> = {
     n: "cursor-ns-resize",
@@ -247,8 +266,24 @@ export default function ResizeHandles({ children }: ResizeHandlesProps) {
           xmlns="http://www.w3.org/2000/svg"
           className="text-foreground/60 transition-colors group-hover:text-primary"
         >
-          <line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          <line x1="8" y1="5.5" x2="5.5" y2="8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <line
+            x1="8"
+            y1="2"
+            x2="2"
+            y2="8"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
+          <line
+            x1="8"
+            y1="5.5"
+            x2="5.5"
+            y2="8"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
           <circle cx="8" cy="8" r="0.8" fill="currentColor" />
         </svg>
       </div>
