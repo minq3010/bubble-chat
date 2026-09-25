@@ -36,6 +36,9 @@ export const translations = {
     snapToEdgeDesc:
       "Bong bóng sẽ tự dính vào cạnh màn hình gần nhất khi thả chuột.",
     closeOnBlur: "Đóng bảng chat khi click ra ngoài",
+    resetPanelPosition: "Đặt lại vị trí bảng chat",
+    resetPanelPositionDesc:
+      "Đưa bảng chat trở về vị trí mặc định bên cạnh bong bóng.",
     resetPanelSize: "Đặt lại kích thước bảng chat",
     resetPanelSizeDesc: "Khôi phục về kích thước mặc định ban đầu.",
 
@@ -68,18 +71,21 @@ export const translations = {
     // Performance Settings
     memoryModes: "Chế độ quản lý bộ nhớ",
     perfBalanced: "Cân bằng",
-    perfBalancedDesc:
-      "Tải tab theo nhu cầu. Duy trì Messenger & Zalo, giải phóng tab nặng khi ẩn.",
+    perfBalancedDesc: "Tải theo nhu cầu và tự giải phóng tab nền sau 1 phút.",
     perfLowMemory: "Tiết kiệm RAM",
     perfLowMemoryDesc:
-      "Chỉ giữ 1 tab đang mở, giải phóng toàn bộ tài nguyên các tab nền.",
+      "Chỉ giữ tab đang mở và giải phóng khi thu nhỏ bảng chat.",
     perfInstant: "Chuyển tức thì",
     perfInstantDesc:
       "Giữ tất cả các tab đã mở trong bộ nhớ để chuyển đổi ngay.",
-    ramUsage: "Bộ nhớ RAM đang sử dụng",
-    trimRamNow: "Dọn dẹp RAM",
-    trimRamDesc: "Giải phóng bộ nhớ đệm và thu hồi tài nguyên chưa sử dụng.",
-    ramOptimized: "Đã dọn dẹp!",
+    ramUsage: "RAM ứng dụng đang sử dụng",
+    ramBeforeSettings: "Trước khi mở Cài đặt",
+    ramProcessCount: "{count} tiến trình",
+    ramMainProcess: "Ứng dụng chính",
+    ramWebContent: "Nội dung web",
+    ramGpu: "Đồ họa",
+    ramUtility: "Tiện ích hệ thống",
+    refreshRam: "Đo lại",
 
     // Privacy & Ads
     contentAndAds: "Nội dung & Quảng cáo",
@@ -89,6 +95,28 @@ export const translations = {
     storageAndCache: "Lưu trữ & Bộ nhớ",
     storageNotice:
       "Các phiên đăng nhập được lưu an toàn trong vùng lưu trữ riêng biệt của Chromium. Bubble Chat không bao giờ lưu trữ mật khẩu của bạn.",
+    storageTabUsage: "Dung lượng dữ liệu trên ổ đĩa",
+    storageTabUsageDesc:
+      "Kích thước dữ liệu và bộ nhớ đệm lưu trữ thực tế của từng tab.",
+    storageWarningBanner:
+      'Tab "{name}" đang lưu {size} MB (vượt ngưỡng {threshold} MB)',
+    storageThreshold: "Ngưỡng cảnh báo dung lượng Tab 3",
+    storageThresholdDesc:
+      "Hiển thị cảnh báo khi dung lượng lưu trữ của tab thứ 3 vượt quá giới hạn này.",
+    clearCustomCacheOnly: "Dọn bộ nhớ đệm {name} (giữ đăng nhập)",
+    clearCustomCacheOnlyDesc:
+      "Xóa dữ liệu đệm và video tạm thời để giải phóng dung lượng mà không làm đăng xuất tài khoản.",
+    clearCacheOnly: "Dọn bộ nhớ đệm",
+    cacheClearedSuccess: "Đã dọn dẹp bộ nhớ đệm thành công!",
+    downloadComplete: 'Đã lưu tệp: "{name}" vào thư mục Tải về',
+    openFolder: "Mở thư mục",
+    threshold300: "300 MB",
+    threshold500: "500 MB (Khuyên dùng)",
+    threshold1000: "1 GB",
+    threshold2000: "2 GB",
+    thresholdOff: "Tắt cảnh báo",
+    cleaning: "Đang dọn…",
+    dismiss: "Bỏ qua",
     clearMessengerSession: "Xóa phiên đăng nhập Messenger",
     clearZaloSession: "Xóa phiên đăng nhập Zalo",
     clearCustomSession: "Xóa phiên đăng nhập {name}",
@@ -142,6 +170,10 @@ export const translations = {
     switchTabQuickly: "Chuyển nhanh sang:",
     switchCustomUrl: "Đổi URL khác...",
     removeThisTab: "Bỏ tab này",
+    resizeHint:
+      "Kéo cạnh hoặc góc để đổi kích thước (Nhấp đúp: chế độ rộng / thu gọn)",
+    wideMode: "Chế độ rộng",
+    compactMode: "Chế độ thu gọn",
 
     // Lock Screen
     timeLimitReached: "Đã hết thời gian sử dụng",
@@ -187,6 +219,9 @@ export const translations = {
     snapToEdge: "Snap to screen edge",
     snapToEdgeDesc: "Bubble docks to the nearest edge on release.",
     closeOnBlur: "Close panel when losing focus",
+    resetPanelPosition: "Reset panel position",
+    resetPanelPositionDesc:
+      "Snap panel back to default position beside the bubble.",
     resetPanelSize: "Reset panel size",
     resetPanelSizeDesc: "Restore default panel dimensions.",
 
@@ -219,17 +254,21 @@ export const translations = {
     memoryModes: "Memory management",
     perfBalanced: "Balanced",
     perfBalancedDesc:
-      "Loads on demand. Keeps chat tabs ready, unloads heavy background media tabs.",
+      "Loads on demand and releases background tabs after one minute.",
     perfLowMemory: "Low Memory",
     perfLowMemoryDesc:
-      "Only keeps the active tab in memory, unloads background tabs completely.",
+      "Keeps only the active tab and releases it when the panel is hidden.",
     perfInstant: "Instant Switching",
     perfInstantDesc:
       "Keeps all opened tabs rendered in memory for zero latency.",
-    ramUsage: "Current RAM usage",
-    trimRamNow: "Trim RAM",
-    trimRamDesc: "Clear cache and reclaim unused background memory.",
-    ramOptimized: "Optimized!",
+    ramUsage: "Current app RAM usage",
+    ramBeforeSettings: "Before opening Settings",
+    ramProcessCount: "{count} processes",
+    ramMainProcess: "Main app",
+    ramWebContent: "Web content",
+    ramGpu: "Graphics",
+    ramUtility: "System utility",
+    refreshRam: "Refresh",
 
     // Privacy & Ads
     contentAndAds: "Content & Ads",
@@ -238,6 +277,28 @@ export const translations = {
     storageAndCache: "Storage & Cache",
     storageNotice:
       "Login sessions are safely kept inside isolated Chromium storage. Bubble never reads or stores passwords.",
+    storageTabUsage: "Disk storage usage by tab",
+    storageTabUsageDesc:
+      "Actual disk space used by cache, local storage, and session data.",
+    storageWarningBanner:
+      'Tab "{name}" is storing {size} MB (exceeds {threshold} MB limit)',
+    storageThreshold: "Tab 3 storage alert threshold",
+    storageThresholdDesc:
+      "Display a warning banner when tab 3 disk storage exceeds this threshold.",
+    clearCustomCacheOnly: "Clear {name} cache (keep login)",
+    clearCustomCacheOnlyDesc:
+      "Clear temporary cached media and web data without logging out.",
+    clearCacheOnly: "Clear cache",
+    cacheClearedSuccess: "Cache cleared successfully!",
+    downloadComplete: 'Downloaded file: "{name}" to Downloads',
+    openFolder: "Open folder",
+    threshold300: "300 MB",
+    threshold500: "500 MB (Recommended)",
+    threshold1000: "1 GB",
+    threshold2000: "2 GB",
+    thresholdOff: "Disabled",
+    cleaning: "Cleaning…",
+    dismiss: "Dismiss",
     clearMessengerSession: "Clear Messenger session",
     clearZaloSession: "Clear Zalo session",
     clearCustomSession: "Clear {name} session",
@@ -291,6 +352,10 @@ export const translations = {
     switchTabQuickly: "Quick switch to:",
     switchCustomUrl: "Change URL...",
     removeThisTab: "Remove tab",
+    resizeHint:
+      "Drag edges or corners to resize (Double-click: toggle wide / compact)",
+    wideMode: "Wide mode",
+    compactMode: "Compact mode",
 
     // Lock Screen
     timeLimitReached: "Usage Time Limit Reached",

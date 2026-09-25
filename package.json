@@ -1,7 +1,7 @@
 {
   "name": "bubble-chat",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Bubble Chat desktop app for Messenger and Zalo",
   "author": {
     "name": "Nguyen Minh Quoc",
@@ -15,6 +15,9 @@
     "format": "oxfmt",
     "generate:totp": "node scripts/generate-totp.cjs",
     "test:update": "node electron/update-utils.test.cjs",
+    "test:memory": "node electron/memory-utils.test.cjs",
+    "test:storage": "node electron/storage-utils.test.cjs",
+    "test:totp": "node electron/totp-utils.test.cjs",
     "electron": "cross-env ELECTRON_RUN_AS_NODE= electron .",
     "electron:dev": "concurrently -k -n vite,electron \"vite --host 0.0.0.0 --port 8443\" \"wait-on tcp:8443 && cross-env ELECTRON_RUN_AS_NODE= VITE_DEV_URL=http://localhost:8443 electron .\"",
     "build:mac": "cross-env ELECTRON=1 vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never",

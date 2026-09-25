@@ -13,8 +13,11 @@ import {
   ChevronRight,
   X,
   RotateCcw,
+  LocateFixed,
   Copy,
   Languages,
+  HardDrive,
+  AlertTriangle,
 } from "lucide-react"
 import {
   AppIcon,
@@ -22,7 +25,14 @@ import {
   bubbleIconNames,
   type BubbleIconName,
 } from "./BrandIcons"
-import { desktop } from "../desktop/bridge"
+import {
+  desktop,
+  resetPanelPosition,
+  resetPanelSize,
+  type MemoryMetricItem,
+  type MemoryUsageResult,
+  type StorageUsageResult,
+} from "../desktop/bridge"
 import { useAppUpdate } from "../hooks/useAppUpdate"
 import { withTransitionSuppression } from "../utils/theme"
 import { useTranslation } from "../utils/i18n"
@@ -45,14 +55,17 @@ function Toggle({
       aria-checked={on}
       aria-label={label}
       onClick={onChange}
-      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none ${
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none ${
         on ? "bg-primary" : "bg-muted-foreground/30"
       }`}
     >
       <span
-        className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-xs transition-transform ${
-          on ? "translate-x-4" : "translate-x-0.5"
+        className={`pointer-events-none inline-block h-4.5 w-4.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+          on ? "translate-x-5" : "translate-x-0.5"
         }`}
+        style={{
+          transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+        }}
       />
     </button>
   )
@@ -105,13 +118,13 @@ function ToggleRow({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 py-2.5">
+    <div className="flex items-center justify-between gap-3 py-3">
       <div className="min-w-0 flex-1 pr-1">
-        <div className="text-[12.5px] font-medium leading-tight text-foreground">
+        <div className="text-[13px] font-medium leading-tight text-foreground">
           {title}
         </div>
         {desc && (
-          <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+          <div className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
             {desc}
           </div>
         )}
@@ -129,11 +142,12 @@ function Group({
   children: React.ReactNode
 }) {
   return (
-    <section className="mb-3.5">
-      <h3 className="mb-1.5 px-1 font-mono text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
-        {title}
+    <section className="mb-4">
+      <h3 className="mb-2 flex items-center gap-2 px-1 font-mono text-[10.5px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+        <span>{title}</span>
+        <span className="flex-1 h-px bg-border/40" />
       </h3>
-      <div className="divide-y divide-border/50 rounded-xl border border-border/70 bg-card px-3.5">
+      <div className="divide-y divide-border/50 rounded-xl border border-border/70 bg-card px-4">
         {children}
       </div>
     </section>
@@ -150,15 +164,15 @@ function Segmented({
   onChange: (v: string) => void
 }) {
   return (
-    <div className="flex w-full items-center rounded-lg bg-muted/80 p-0.5">
+    <div className="flex w-full items-center rounded-lg bg-muted/80 p-1">
       {options.map((option) => (
         <button
           key={option}
           type="button"
           onClick={() => onChange(option)}
-          className={`flex-1 rounded-md py-1 text-center font-medium text-[11.5px] transition-all ${
+          className={`flex-1 rounded-md py-1.5 text-center font-medium text-[12px] transition-all duration-200 cursor-pointer ${
             value === option
-              ? "bg-card text-foreground shadow-xs"
+              ? "bg-card text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -297,10 +311,16 @@ function GeneralPane() {
           defaultOn
         />
         <ActionRow
+          icon={<LocateFixed size={14} />}
+          title={t("resetPanelPosition")}
+          desc={t("resetPanelPositionDesc")}
+          onClick={() => resetPanelPosition()}
+        />
+        <ActionRow
           icon={<RotateCcw size={14} />}
           title={t("resetPanelSize")}
           desc={t("resetPanelSizeDesc")}
-          onClick={() => desktop()?.resetPanelSize()}
+          onClick={() => resetPanelSize()}
         />
       </Group>
     </>
@@ -514,15 +534,14 @@ function PerformancePane() {
   const [mode, setMode] = useState(
     () => localStorage.getItem("bubble.performanceMode") || "Balanced",
   )
-  const [memoryMB, setMemoryMB] = useState<number | null>(null)
-  const [isTrimming, setIsTrimming] = useState(false)
-  const [trimmed, setTrimmed] = useState(false)
+  const [memory, setMemory] = useState<MemoryUsageResult | null>(null)
+  const [isRefreshingMemory, setIsRefreshingMemory] = useState(false)
 
   const fetchMemory = useCallback(async () => {
     try {
       const res = await desktop()?.getMemoryUsage?.()
       if (res && typeof res.totalMB === "number") {
-        setMemoryMB(res.totalMB)
+        setMemory(res)
       }
     } catch {}
   }, [])
@@ -533,15 +552,10 @@ function PerformancePane() {
     return () => clearInterval(timer)
   }, [fetchMemory])
 
-  const handleTrimMemory = async () => {
-    setIsTrimming(true)
-    try {
-      await desktop()?.trimMemory?.()
-      setTrimmed(true)
-      setTimeout(() => setTrimmed(false), 2500)
-      await fetchMemory()
-    } catch {}
-    setIsTrimming(false)
+  const handleRefreshMemory = async () => {
+    setIsRefreshingMemory(true)
+    await fetchMemory()
+    setIsRefreshingMemory(false)
   }
 
   const saveMode = (next: string) => {
@@ -573,35 +587,76 @@ function PerformancePane() {
     },
   ]
 
+  const metricLabel = (metric: MemoryMetricItem) => {
+    if (metric.type === "Browser") return t("ramMainProcess")
+    if (metric.type === "Tab") return t("ramWebContent")
+    if (metric.type === "GPU") return t("ramGpu")
+    if (metric.type === "Utility") return metric.name || t("ramUtility")
+    return metric.type
+  }
+
   return (
     <>
-      <div className="mb-3 flex items-center justify-between rounded-xl border border-border/70 bg-card/60 p-3">
-        <div className="flex items-center gap-2.5">
-          <Gauge size={18} className="text-primary shrink-0" />
-          <div>
-            <div className="text-[12px] font-medium text-foreground">
-              {t("ramUsage")}
-            </div>
-            <div className="mt-0.5 text-[11px] text-muted-foreground">
-              {memoryMB !== null ? (
-                <span className="font-mono font-semibold text-foreground">
-                  ~{memoryMB} MB
-                </span>
-              ) : (
-                "---"
+      <div className="mb-3 rounded-xl border border-border/70 bg-card/60 p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Gauge size={18} className="text-primary shrink-0" />
+            <div>
+              <div className="text-[12px] font-medium text-foreground">
+                {t("ramUsage")}
+              </div>
+              <div className="mt-0.5 font-mono text-[15px] font-semibold text-foreground">
+                {memory ? `${memory.totalMB} MB` : "---"}
+              </div>
+              {memory?.processCount && (
+                <div className="text-[10.5px] text-muted-foreground">
+                  {t("ramProcessCount", { count: memory.processCount })}
+                </div>
               )}
             </div>
           </div>
+          <button
+            type="button"
+            disabled={isRefreshingMemory}
+            onClick={handleRefreshMemory}
+            className="flex items-center gap-1.5 rounded-lg border border-border/80 bg-muted/80 px-2.5 py-1 text-[11.5px] font-medium text-foreground transition-all hover:bg-muted active:scale-95 disabled:opacity-50 cursor-pointer"
+          >
+            <RotateCcw
+              size={11}
+              className={isRefreshingMemory ? "animate-spin" : ""}
+            />
+            <span>{t("refreshRam")}</span>
+          </button>
         </div>
-        <button
-          type="button"
-          disabled={isTrimming}
-          onClick={handleTrimMemory}
-          className="flex items-center gap-1.5 rounded-lg border border-border/80 bg-muted/80 px-2.5 py-1 text-[11.5px] font-medium text-foreground transition-all hover:bg-muted active:scale-95 disabled:opacity-50 cursor-pointer"
-        >
-          <RotateCcw size={11} className={isTrimming ? "animate-spin" : ""} />
-          <span>{trimmed ? t("ramOptimized") : t("trimRamNow")}</span>
-        </button>
+
+        {memory?.chatMB && (
+          <div className="mt-2 flex justify-between border-t border-border/50 pt-2 text-[11px]">
+            <span className="text-muted-foreground">
+              {t("ramBeforeSettings")}
+            </span>
+            <span className="font-mono font-medium text-foreground">
+              {memory.chatMB} MB
+            </span>
+          </div>
+        )}
+
+        {memory?.metrics && memory.metrics.length > 0 && (
+          <div className="mt-2 space-y-1 border-t border-border/50 pt-2">
+            {memory.metrics.map((metric, index) => (
+              <div
+                key={`${metric.type}-${metric.name || index}`}
+                className="flex justify-between text-[10.5px]"
+              >
+                <span className="truncate text-muted-foreground">
+                  {metricLabel(metric)}
+                </span>
+                <span className="ml-3 shrink-0 font-mono text-foreground/80">
+                  {metric.mb} MB
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <Group title={t("memoryModes")}>
@@ -640,6 +695,13 @@ function PerformancePane() {
 
 function PrivacyPane() {
   const { t } = useTranslation()
+  const [storageUsage, setStorageUsage] = useState<StorageUsageResult | null>(
+    null,
+  )
+  const [threshold, setThreshold] = useState<number>(500)
+  const [isCleaningCustom, setIsCleaningCustom] = useState(false)
+  const [cleanSuccess, setCleanSuccess] = useState(false)
+
   const customTabName = (() => {
     try {
       const raw = localStorage.getItem("bubble.customTab")
@@ -649,6 +711,48 @@ function PrivacyPane() {
     }
   })()
 
+  const loadStorage = useCallback(() => {
+    desktop()
+      ?.getStorageUsage?.()
+      .then((data) => {
+        if (data) {
+          setStorageUsage(data)
+          if (typeof data.warnThresholdMB === "number") {
+            setThreshold(data.warnThresholdMB)
+          }
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    loadStorage()
+  }, [loadStorage])
+
+  const handleSetThreshold = (val: number) => {
+    setThreshold(val)
+    desktop()?.setStorageThreshold?.(val)
+  }
+
+  const handleClearCustomCache = async () => {
+    setIsCleaningCustom(true)
+    try {
+      const updated = await desktop()?.clearCustomCache?.()
+      if (updated) setStorageUsage(updated)
+      setCleanSuccess(true)
+      setTimeout(() => setCleanSuccess(false), 2500)
+    } catch {}
+    setIsCleaningCustom(false)
+  }
+
+  const thresholdOptions = [
+    { label: t("threshold300"), value: 300 },
+    { label: t("threshold500"), value: 500 },
+    { label: t("threshold1000"), value: 1000 },
+    { label: t("threshold2000"), value: 2000 },
+    { label: t("thresholdOff"), value: 0 },
+  ]
+
   return (
     <>
       <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-border/70 bg-accent/40 p-3">
@@ -657,6 +761,77 @@ function PrivacyPane() {
           {t("storageNotice")}
         </p>
       </div>
+
+      <Group title={t("storageTabUsage")}>
+        <div className="grid grid-cols-3 gap-2 p-1">
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-2.5 text-center">
+            <span className="text-[11px] font-medium text-muted-foreground block truncate">
+              Messenger
+            </span>
+            <span className="text-sm font-semibold text-foreground mt-0.5 block">
+              {storageUsage ? `${storageUsage.messengerMB} MB` : "..."}
+            </span>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-2.5 text-center">
+            <span className="text-[11px] font-medium text-muted-foreground block truncate">
+              Zalo
+            </span>
+            <span className="text-sm font-semibold text-foreground mt-0.5 block">
+              {storageUsage ? `${storageUsage.zaloMB} MB` : "..."}
+            </span>
+          </div>
+          <div
+            className={`rounded-xl border p-2.5 text-center transition-colors ${
+              storageUsage &&
+              threshold > 0 &&
+              storageUsage.customMB >= threshold
+                ? "border-amber-500/50 bg-amber-500/10"
+                : "border-border/60 bg-muted/30"
+            }`}
+          >
+            <span className="text-[11px] font-medium text-muted-foreground block truncate">
+              {customTabName || "Tab 3"}
+            </span>
+            <span className="text-sm font-semibold text-foreground mt-0.5 flex items-center justify-center gap-1">
+              {storageUsage ? `${storageUsage.customMB} MB` : "..."}
+              {storageUsage &&
+                threshold > 0 &&
+                storageUsage.customMB >= threshold && (
+                  <AlertTriangle size={13} className="text-amber-400" />
+                )}
+            </span>
+          </div>
+        </div>
+
+        <div className="px-3 py-2 border-t border-border/40 mt-1">
+          <div className="flex items-center justify-between mb-1.5">
+            <div>
+              <span className="text-xs font-medium text-foreground block">
+                {t("storageThreshold")}
+              </span>
+              <span className="text-[11px] text-muted-foreground block">
+                {t("storageThresholdDesc")}
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {thresholdOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => handleSetThreshold(opt.value)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
+                  threshold === opt.value
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Group>
 
       <Group title={t("contentAndAds")}>
         <ToggleRow
@@ -668,6 +843,18 @@ function PrivacyPane() {
       </Group>
 
       <Group title={t("storageAndCache")}>
+        {customTabName && (
+          <ActionRow
+            icon={<HardDrive size={14} />}
+            title={t("clearCustomCacheOnly", { name: customTabName })}
+            desc={
+              cleanSuccess
+                ? t("cacheClearedSuccess")
+                : t("clearCustomCacheOnlyDesc")
+            }
+            onClick={handleClearCustomCache}
+          />
+        )}
         <ActionRow
           icon={<Trash2 size={14} />}
           title={t("clearMessengerSession")}
@@ -1013,26 +1200,26 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-panel">
       {/* Header */}
-      <header className="flex h-11 shrink-0 items-center justify-between border-b border-border/50 bg-card/60 px-3 select-none">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/50 bg-card/60 px-3.5 select-none">
         {section ? (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setSection(null)}
-              className="flex items-center gap-0.5 rounded-md px-1.5 py-1 font-medium text-[12px] text-primary transition-colors hover:bg-muted"
+              className="flex items-center gap-0.5 rounded-lg px-2 py-1.5 font-medium text-[13px] text-primary transition-all hover:bg-muted active:scale-95 cursor-pointer"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={18} />
               <span>{t("back")}</span>
             </button>
             <span className="text-border-strong">/</span>
-            <span className="truncate font-semibold text-[13px] text-foreground">
+            <span className="truncate font-semibold text-[14px] text-foreground">
               {activeMeta?.label}
             </span>
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <AppIcon size={16} />
-            <span className="font-semibold text-[13px] text-foreground">
+            <AppIcon size={18} />
+            <span className="font-semibold text-[14px] text-foreground">
               {t("settings")}
             </span>
           </div>
@@ -1042,21 +1229,21 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={() => setLanguage(lang === "vi" ? "en" : "vi")}
-            className="flex items-center gap-1 rounded-md border border-border/70 bg-card/60 px-2 py-0.5 font-mono text-[11px] font-semibold text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
+            className="flex items-center gap-1 rounded-lg border border-border/70 bg-card/60 px-2.5 py-1 font-mono text-[11.5px] font-semibold text-foreground/80 hover:bg-muted transition-all active:scale-95 cursor-pointer"
             title={
               lang === "vi" ? "Switch to English" : "Chuyển sang Tiếng Việt"
             }
           >
-            <Languages size={12} className="opacity-70" />
+            <Languages size={13} className="opacity-70" />
             <span>{lang === "vi" ? "VI" : "EN"}</span>
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="flex items-center gap-1 rounded-md bg-muted/80 px-2.5 py-1 font-medium text-[11.5px] text-foreground transition-colors hover:bg-border cursor-pointer"
+            className="flex items-center gap-1 rounded-lg bg-muted/80 px-3 py-1.5 font-medium text-[12px] text-foreground transition-all hover:bg-border active:scale-95 cursor-pointer"
           >
             <span>{t("done")}</span>
-            <X size={12} className="opacity-70" />
+            <X size={13} className="opacity-70" />
           </button>
         </div>
       </header>
@@ -1064,7 +1251,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
       {/* Main body area */}
       <div className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3">
         {section === null ? (
-          <div className="space-y-1">
+          <div className="space-y-1.5 stagger-children">
             {sections.map((item) => {
               const Icon = item.icon
               return (
@@ -1072,35 +1259,35 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
                   key={item.id}
                   type="button"
                   onClick={() => setSection(item.id)}
-                  className="group flex w-full items-center gap-3 rounded-xl border border-border/40 bg-card/50 px-3 py-2.5 text-left transition-all hover:border-border/80 hover:bg-card active:scale-[0.99]"
+                  className="group flex w-full items-center gap-3 rounded-xl border border-border/40 bg-card/50 px-3.5 py-3 text-left transition-all duration-200 hover:border-border/80 hover:bg-card hover:-translate-y-[1px] hover:shadow-e1 active:scale-[0.99] active:translate-y-0 animate-fade-in cursor-pointer"
                 >
                   <div
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${item.accent}`}
+                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${item.accent}`}
                   >
-                    <Icon size={16} />
+                    <Icon size={18} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-[13px] text-foreground group-hover:text-primary">
+                    <div className="font-medium text-[13.5px] text-foreground group-hover:text-primary transition-colors">
                       {item.label}
                       {item.id === "about" &&
                         updateInfo.status === "available" && (
-                          <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-danger align-middle" />
+                          <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-danger align-middle animate-pulse-dot" />
                         )}
                     </div>
-                    <div className="truncate text-[11px] text-muted-foreground">
+                    <div className="truncate text-[11.5px] text-muted-foreground">
                       {item.desc}
                     </div>
                   </div>
                   <ChevronRight
-                    size={14}
-                    className="shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5"
+                    size={16}
+                    className="shrink-0 text-muted-foreground/50 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-muted-foreground"
                   />
                 </button>
               )
             })}
           </div>
         ) : (
-          <div>{renderContent()}</div>
+          <div className="animate-slide-in-right">{renderContent()}</div>
         )}
       </div>
 

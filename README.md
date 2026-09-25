@@ -9,7 +9,7 @@
 
   <p>
     <a href="https://github.com/minq3010/bubble-chat/releases/latest">
-      <img src="https://img.shields.io/badge/Release-v1.0.7-0084FF?style=flat-square" alt="Version 1.0.7" />
+      <img src="https://img.shields.io/badge/Release-v1.0.8-0084FF?style=flat-square" alt="Version 1.0.8" />
     </a>
     <img src="https://img.shields.io/badge/Platform-macOS_%7C_Windows_%7C_Linux-27272a?style=flat-square" alt="Platforms" />
     <img src="https://img.shields.io/badge/Stack-Electron_%E2%80%A2_React_%E2%80%A2_Vite-0284c7?style=flat-square" alt="Tech Stack" />
@@ -110,13 +110,13 @@
 <a id="tai-xuong"></a>
 ## Tải xuống
 
-Các gói cài đặt trực tiếp cho phiên bản **v1.0.7**:
+Các gói cài đặt trực tiếp cho phiên bản **v1.0.8**:
 
 | Nền tảng | Kiến trúc | Liên kết tải về | Định dạng |
 | :--- | :---: | :--- | :---: |
-| macOS | Apple Silicon (`arm64`) | [Tải về Bubble Chat cho macOS](https://github.com/minq3010/bubble-chat/releases/download/v1.0.7/Bubble-Chat-1.0.7-mac-arm64.dmg) | `.dmg` |
-| Windows | 64-bit (`x64`) | [Tải về Bubble Chat cho Windows](https://github.com/minq3010/bubble-chat/releases/download/v1.0.7/Bubble-Chat-1.0.7-win-x64.exe) | `.exe` |
-| Linux | Ubuntu / Debian (`amd64`) | [Tải về Bubble Chat cho Linux](https://github.com/minq3010/bubble-chat/releases/download/v1.0.7/Bubble-Chat-1.0.7-linux-amd64.deb) | `.deb` |
+| macOS | Apple Silicon (`arm64`) | [Tải về Bubble Chat cho macOS](https://github.com/minq3010/bubble-chat/releases/download/v1.0.8/Bubble-Chat-1.0.8-mac-arm64.dmg) | `.dmg` |
+| Windows | 64-bit (`x64`) | [Tải về Bubble Chat cho Windows](https://github.com/minq3010/bubble-chat/releases/download/v1.0.8/Bubble-Chat-1.0.8-win-x64.exe) | `.exe` |
+| Linux | Ubuntu / Debian (`amd64`) | [Tải về Bubble Chat cho Linux](https://github.com/minq3010/bubble-chat/releases/download/v1.0.8/Bubble-Chat-1.0.8-linux-amd64.deb) | `.deb` |
 
 > [!TIP]
 > Bạn có thể xem toàn bộ các bản phát hành và lịch sử cập nhật tại mục [Releases](https://github.com/minq3010/bubble-chat/releases).
@@ -160,7 +160,7 @@ Các gói cài đặt trực tiếp cho phiên bản **v1.0.7**:
 1. Tải về tệp `.deb`.
 2. Mở tệp bằng trình quản lý phần mềm (Software Install), hoặc chạy lệnh Terminal:
    ```bash
-   sudo dpkg -i Bubble-Chat-1.0.7-linux-amd64.deb
+   sudo dpkg -i Bubble-Chat-1.0.8-linux-amd64.deb
    ```
 3. Mở **Bubble Chat** từ menu ứng dụng.
 

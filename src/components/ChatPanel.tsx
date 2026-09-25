@@ -1,14 +1,8 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useMemo,
-  createElement,
-} from "react"
+import { useCallback, useEffect, useState, useMemo } from "react"
 import {
   RotateCw,
   RotateCcw,
+  LocateFixed,
   ExternalLink,
   Minus,
   MoreHorizontal,
@@ -20,696 +14,33 @@ import {
   Trash2,
   Check,
 } from "lucide-react"
+import ChatWebView from "./ChatWebView"
 import {
-  MessengerIcon,
-  ZaloIcon,
-  YoutubeIcon,
-  TiktokIcon,
-  SpotifyIcon,
-} from "./BrandIcons"
-import { desktop } from "../desktop/bridge"
-import { useWebviewZoom } from "../hooks/useWebviewZoom"
+  AddTabModal,
+  CHAT_PRESETS,
+  defaultMeta,
+  ENTERTAINMENT_PRESETS,
+  FailedState,
+  getCustomTabIcon,
+  ProviderTab,
+  RemoveTabModal,
+  type CustomTab,
+  type Preset,
+  type Provider,
+} from "./ChatPanelParts"
+export type { CustomTab, Provider } from "./ChatPanelParts"
+import {
+  desktop,
+  resetPanelPosition,
+  resetPanelSize,
+  type StorageWarningInfo,
+  type DownloadCompleteInfo,
+} from "../desktop/bridge"
 import { useUnreadCounts } from "../hooks/useUnreadCounts"
 import { useAppUpdate } from "../hooks/useAppUpdate"
 import { useTranslation } from "../utils/i18n"
 
-export type Provider = "messenger" | "zalo" | "custom"
-export type CustomTab = {
-  name: string
-  url: string
-  color?: string
-}
-
 type LoadState = "ready" | "failed"
-
-const defaultMeta = {
-  messenger: {
-    name: "Messenger",
-    Icon: MessengerIcon,
-    color: "var(--messenger)",
-    url: "https://www.messenger.com",
-  },
-  zalo: {
-    name: "Zalo",
-    Icon: ZaloIcon,
-    color: "var(--zalo)",
-    url: "https://chat.zalo.me",
-  },
-} as const
-
-type PresetIconProps = {
-  className?: string
-  size?: number
-}
-
-type Preset = {
-  name: string
-  url: string
-  color: string
-  Icon?: (props: PresetIconProps) => React.JSX.Element
-}
-
-const ENTERTAINMENT_PRESETS: Preset[] = [
-  {
-    name: "YouTube",
-    url: "https://www.youtube.com",
-    color: "#FF0000",
-    Icon: YoutubeIcon,
-  },
-  {
-    name: "TikTok",
-    url: "https://www.tiktok.com",
-    color: "#FE2C55",
-    Icon: TiktokIcon,
-  },
-  {
-    name: "Spotify",
-    url: "https://open.spotify.com",
-    color: "#1DB954",
-    Icon: SpotifyIcon,
-  },
-]
-
-const CHAT_PRESETS: Preset[] = [
-  { name: "Telegram", url: "https://web.telegram.org/a/", color: "#229ED9" },
-  { name: "WhatsApp", url: "https://web.whatsapp.com", color: "#25D366" },
-  { name: "Discord", url: "https://discord.com/app", color: "#5865F2" },
-  { name: "ChatGPT", url: "https://chatgpt.com", color: "#10A37F" },
-  { name: "Slack", url: "https://app.slack.com/client", color: "#E01E5A" },
-]
-
-function getCustomTabIcon(name?: string, url?: string) {
-  const target = `${name || ""} ${url || ""}`.toLowerCase()
-  if (target.includes("youtube") || target.includes("youtu.be"))
-    return YoutubeIcon
-  if (target.includes("tiktok")) return TiktokIcon
-  if (target.includes("spotify")) return SpotifyIcon
-  return Globe
-}
-
-const UNREAD_PROBE = `(() => {
-  if (/\\(\\d+\\)/.test(document.title)) return 1;
-  const marker = document.querySelector(
-    "[aria-label*='unread' i],[aria-label*='chưa đọc' i],[data-testid*='unread' i],[class*='unread' i]"
-  );
-  if (marker) return 1;
-  const badge = document.querySelector(
-    "[aria-label*='notification' i],[aria-label*='thông báo' i]"
-  );
-  if (badge) return 1;
-  return 0;
-})()`
-
-const AD_BLOCK_CSS = `
-.video-ads,
-.ytp-ad-module,
-.ytp-ad-overlay-container,
-.ytp-ad-player-overlay,
-.ytp-ad-player-overlay-layout,
-#masthead-ad,
-ytd-display-ad-renderer,
-ytd-promoted-sparkles-web-renderer,
-ytd-promoted-video-renderer,
-ytd-banner-promo-renderer,
-ytd-ad-slot-renderer,
-ytd-in-feed-ad-layout-renderer,
-ytd-player-legacy-desktop-watch-ads-renderer,
-#player-ads,
-tp-yt-paper-dialog:has(#feedback.ytd-enforcement-message-view-model),
-ytd-enforcement-message-view-model,
-[data-testid="banner-ad"],
-[data-testid="in-app-banner"],
-[aria-label="Sponsored"],
-.upgrade-button,
-ins.adsbygoogle,
-[id^="google_ads_"],
-div[data-google-query-id] {
-  display: none !important;
-}
-`
-
-const AD_BLOCK_SCRIPT = `(() => {
-  if (window.__bubbleAdBlockActive) return;
-  window.__bubbleAdBlockActive = true;
-
-  const isYouTube = location.hostname.includes("youtube.com") || location.hostname.includes("youtu.be");
-  const isSpotify = location.hostname.includes("spotify.com");
-
-  let wasMutedBeforeAd = false;
-
-  function handleYouTube() {
-    const skipSelectors = [
-      ".ytp-ad-skip-button",
-      ".ytp-ad-skip-button-modern",
-      ".ytp-skip-ad-button",
-      ".ytp-ad-skip-button-slot button",
-      "button[id^='skip-button']"
-    ];
-    for (const sel of skipSelectors) {
-      const btn = document.querySelector(sel);
-      if (btn && typeof btn.click === "function") {
-        btn.click();
-        break;
-      }
-    }
-
-    const player = document.querySelector("#movie_player, .html5-video-player");
-    const isAdShowing = player && (
-      player.classList.contains("ad-showing") ||
-      player.classList.contains("ad-interrupting") ||
-      Boolean(document.querySelector(".ytp-ad-player-overlay, .ytp-ad-module:not(:empty)"))
-    );
-    const video = document.querySelector("video");
-
-    if (video) {
-      if (isAdShowing) {
-        if (!wasMutedBeforeAd) {
-          wasMutedBeforeAd = video.muted;
-        }
-        video.muted = true;
-        video.playbackRate = 16.0;
-        if (Number.isFinite(video.duration) && video.duration > 0) {
-          video.currentTime = video.duration;
-        }
-      } else if (video.playbackRate > 2.0) {
-        video.playbackRate = 1.0;
-        video.muted = wasMutedBeforeAd;
-      }
-    }
-
-    const dialog = document.querySelector("tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)");
-    if (dialog) {
-      dialog.remove();
-      if (video && video.paused) {
-        void video.play().catch(() => {});
-      }
-    }
-    const dismissBtn = document.querySelector("ytd-enforcement-message-view-model #dismiss-button button");
-    if (dismissBtn && typeof dismissBtn.click === "function") {
-      dismissBtn.click();
-    }
-  }
-
-  function handleSpotify() {
-    const trackInfo = document.querySelector("[data-testid='now-playing-widget'], [data-testid='context-item-info']");
-    const isAd = trackInfo && /advertisement|quảng cáo/i.test(trackInfo.textContent || "");
-    if (isAd) {
-      const skipForward = document.querySelector("[data-testid='control-button-skip-forward']");
-      if (skipForward && typeof skipForward.click === "function") {
-        skipForward.click();
-      }
-      const audio = document.querySelector("audio");
-      if (audio && Number.isFinite(audio.duration) && audio.duration > 0) {
-        audio.currentTime = audio.duration;
-      }
-    }
-  }
-
-  setInterval(() => {
-    try {
-      if (isYouTube) handleYouTube();
-      if (isSpotify) handleSpotify();
-    } catch {}
-  }, 600);
-})()`
-
-function ProviderTab({
-  provider,
-  active,
-  unread,
-  customName,
-  customColor,
-  onClick,
-  onRemove,
-  onContextMenu,
-}: {
-  provider: Provider
-  active: boolean
-  unread: number
-  customName?: string
-  customColor?: string
-  onClick: () => void
-  onRemove?: () => void
-  onContextMenu?: (e: React.MouseEvent) => void
-}) {
-  const isCustom = provider === "custom"
-  const name = isCustom ? customName || "Custom" : defaultMeta[provider].name
-  const Icon = isCustom
-    ? getCustomTabIcon(customName)
-    : defaultMeta[provider].Icon
-  const color = isCustom
-    ? customColor || "var(--primary)"
-    : defaultMeta[provider].color
-
-  return (
-    <div
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-      role="button"
-      tabIndex={0}
-      aria-pressed={active}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          onClick()
-        }
-      }}
-      className={`group relative flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2.5 py-0.5 text-[12px] font-medium transition-all duration-150 outline-none select-none focus-visible:ring-1 focus-visible:ring-ring/60 ${
-        active
-          ? "bg-card text-card-foreground shadow-sm"
-          : "text-muted-foreground hover:bg-card/40 hover:text-foreground"
-      }`}
-    >
-      <Icon
-        size={14}
-        className="shrink-0"
-        style={{ color: isCustom ? color : undefined }}
-      />
-      <span className="max-w-[85px] truncate" title={name}>
-        {name}
-      </span>
-      {unread > 0 && (
-        <span
-          className="ml-0.5 h-2 w-2 shrink-0 rounded-full"
-          style={{ background: "var(--danger)" }}
-        />
-      )}
-      {onRemove && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onRemove()
-          }}
-          title="Bỏ tab này"
-          className="ml-0.5 -mr-1 flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/60 transition-colors hover:bg-muted hover:text-danger"
-        >
-          <X size={11} />
-        </button>
-      )}
-      {active && (
-        <span
-          className="absolute -bottom-[3px] left-1/2 h-[2px] w-5 -translate-x-1/2 rounded-full"
-          style={{ background: color }}
-        />
-      )}
-    </div>
-  )
-}
-
-function FailedState({ onReload }: { onReload: () => void }) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 px-5 text-center sm:px-10">
-      <div
-        className="grid h-14 w-14 place-items-center rounded-2xl border border-border"
-        style={{
-          background: "color-mix(in srgb, var(--muted) 70%, transparent)",
-        }}
-      >
-        <AlertTriangle className="text-danger" size={24} />
-      </div>
-      <div className="space-y-1.5">
-        <h3 className="text-[15px] font-semibold">{t("pageFailed")}</h3>
-        <p className="mx-auto max-w-[15rem] text-[12.5px] leading-relaxed text-muted-foreground">
-          {t("pageFailedDesc")}
-        </p>
-      </div>
-      <button
-        onClick={onReload}
-        className="mt-1 rounded-[9px] bg-danger px-4 py-1.5 text-[12.5px] font-medium text-white shadow-e1 transition-transform active:scale-[0.97] cursor-pointer"
-      >
-        {t("reload")}
-      </button>
-    </div>
-  )
-}
-
-function AddTabModal({
-  onAdd,
-  onClose,
-}: {
-  onAdd: (tab: CustomTab) => void
-  onClose: () => void
-}) {
-  const { t } = useTranslation()
-  const [name, setName] = useState("")
-  const [url, setUrl] = useState("")
-  const [color, setColor] = useState("#6366F1")
-  const [error, setError] = useState("")
-
-  const applyPreset = (preset: Preset) => {
-    setName(preset.name)
-    setUrl(preset.url)
-    setColor(preset.color)
-    setError("")
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const trimmedName = name.trim()
-    let trimmedUrl = url.trim()
-
-    if (!trimmedName) {
-      setError(t("nameRequired"))
-      return
-    }
-    if (!trimmedUrl) {
-      setError(t("urlRequired"))
-      return
-    }
-
-    if (!/^https?:\/\//i.test(trimmedUrl)) {
-      trimmedUrl = `https://${trimmedUrl}`
-    }
-
-    try {
-      new URL(trimmedUrl)
-    } catch {
-      setError(t("invalidUrl"))
-      return
-    }
-
-    onAdd({
-      name: trimmedName,
-      url: trimmedUrl,
-      color,
-    })
-  }
-
-  return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px] animate-in fade-in duration-150">
-      <div className="flex w-full max-w-[320px] flex-col rounded-[14px] border border-border/80 bg-panel p-4 shadow-e3">
-        <div className="flex items-center justify-between pb-1">
-          <div className="flex items-center gap-2">
-            <div className="grid h-7 w-7 place-items-center rounded-lg bg-primary/10 text-primary">
-              <Globe size={15} />
-            </div>
-            <div>
-              <h4 className="text-[13px] font-semibold text-foreground">
-                {t("addNewTab")}
-              </h4>
-              <p className="text-[10.5px] text-muted-foreground">
-                {t("maxOneTab")}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
-          >
-            <X size={14} />
-          </button>
-        </div>
-
-        {/* Presets */}
-        <div className="mt-2 space-y-2">
-          <div>
-            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              🎬 {t("entertainment")}
-            </span>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {ENTERTAINMENT_PRESETS.map((p) => {
-                const IconComponent = p.Icon
-                return (
-                  <button
-                    key={p.name}
-                    type="button"
-                    onClick={() => applyPreset(p)}
-                    className={`inline-flex items-center gap-1.5 rounded-[6px] border px-2 py-0.5 text-[11px] font-medium transition-all cursor-pointer ${
-                      name === p.name
-                        ? "border-primary bg-primary/10 font-semibold text-primary"
-                        : "border-border/60 bg-card/50 text-muted-foreground hover:bg-card hover:text-foreground"
-                    }`}
-                  >
-                    {IconComponent && <IconComponent size={12} />}
-                    <span>{p.name}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div>
-            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              💬 {t("chatAndAi")}
-            </span>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {CHAT_PRESETS.map((p) => (
-                <button
-                  key={p.name}
-                  type="button"
-                  onClick={() => applyPreset(p)}
-                  className={`rounded-[6px] border px-2 py-0.5 text-[11px] font-medium transition-all cursor-pointer ${
-                    name === p.name
-                      ? "border-primary bg-primary/10 font-semibold text-primary"
-                      : "border-border/60 bg-card/50 text-muted-foreground hover:bg-card hover:text-foreground"
-                  }`}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-2.5">
-          <div>
-            <label className="text-[11px] font-medium text-muted-foreground">
-              {t("tabName")}
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value)
-                setError("")
-              }}
-              placeholder={t("tabNamePlaceholder")}
-              maxLength={20}
-              className="mt-1 w-full rounded-[8px] border border-border bg-card px-2.5 py-1.5 text-[12px] text-foreground outline-none transition-colors focus:border-primary"
-              autoFocus
-            />
-          </div>
-
-          <div>
-            <label className="text-[11px] font-medium text-muted-foreground">
-              {t("urlAddress")}
-            </label>
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => {
-                setUrl(e.target.value)
-                setError("")
-              }}
-              placeholder="https://..."
-              className="mt-1 w-full rounded-[8px] border border-border bg-card px-2.5 py-1.5 text-[12px] text-foreground outline-none transition-colors focus:border-primary"
-            />
-          </div>
-
-          {error && (
-            <p className="text-[11px] font-medium text-danger">{error}</p>
-          )}
-
-          <div className="mt-2 flex items-center justify-end gap-2 border-t border-border/40 pt-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-[8px] px-3 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
-            >
-              {t("cancel")}
-            </button>
-            <button
-              type="submit"
-              className="rounded-[8px] bg-primary px-3.5 py-1 text-[12px] font-semibold text-primary-foreground shadow-xs transition-all hover:opacity-90 active:scale-95 cursor-pointer"
-            >
-              {t("addTab")}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-function RemoveTabModal({
-  tabName,
-  onConfirm,
-  onCancel,
-}: {
-  tabName: string
-  onConfirm: () => void
-  onCancel: () => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px] animate-in fade-in duration-150">
-      <div className="flex w-full max-w-[290px] flex-col rounded-[14px] border border-border/80 bg-panel p-4 shadow-e3">
-        <h4 className="text-[13px] font-semibold text-foreground">
-          {t("removeTabTitle", { name: tabName })}
-        </h4>
-        <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
-          {t("removeTabDesc")}
-        </p>
-
-        <div className="mt-4 flex items-center justify-end gap-2 border-t border-border/40 pt-2.5">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-[8px] px-3 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
-          >
-            {t("cancel")}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="rounded-[8px] bg-danger px-3.5 py-1 text-[12px] font-semibold text-white shadow-xs transition-all hover:opacity-90 active:scale-95 cursor-pointer"
-          >
-            {t("confirmRemove")}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function WebView({
-  provider,
-  customTab,
-  onStateChange,
-}: {
-  provider: Provider
-  customTab?: CustomTab | null
-  onStateChange: (state: LoadState) => void
-}) {
-  const url =
-    provider === "messenger"
-      ? defaultMeta.messenger.url
-      : provider === "zalo"
-        ? defaultMeta.zalo.url
-        : customTab?.url || "about:blank"
-  const viewRef = useRef<HTMLElement>(null)
-  const {
-    zoomBadgeVisible,
-    formattedZoomPercent,
-    bindWebview,
-    triggerGuestResize,
-  } = useWebviewZoom(provider)
-
-  const applyAdBlock = useCallback(() => {
-    if (localStorage.getItem("bubble.adBlock") === "false") return
-    const view = viewRef.current as HTMLElement & {
-      insertCSS?: (css: string) => Promise<unknown>
-      executeJavaScript?: (code: string) => Promise<unknown>
-    } | null
-    if (!view) return
-    try {
-      if (typeof view.insertCSS === "function") {
-        void view.insertCSS(AD_BLOCK_CSS).catch(() => {})
-      }
-      if (typeof view.executeJavaScript === "function") {
-        void view.executeJavaScript(AD_BLOCK_SCRIPT).catch(() => {})
-      }
-    } catch {}
-  }, [])
-
-  const pollUnread = useCallback(() => {
-    applyAdBlock()
-    if (!viewRef.current) return
-    const view = viewRef.current as HTMLElement & {
-      executeJavaScript?: (code: string) => Promise<unknown>
-    }
-    if (typeof view.executeJavaScript !== "function") return
-    try {
-      void view
-        .executeJavaScript(UNREAD_PROBE)
-        .then((value) => {
-          const count =
-            typeof value === "number" && Number.isFinite(value)
-              ? Math.max(0, Math.floor(value))
-              : 0
-          desktop()?.reportUnread(provider, count)
-        })
-        .catch(() => undefined)
-    } catch {
-      // The webview is not attached until dom-ready.
-    }
-  }, [provider, applyAdBlock])
-
-  useEffect(() => {
-    const handleResize = () => triggerGuestResize()
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [triggerGuestResize])
-
-  useEffect(() => {
-    if (!viewRef.current) return
-    const view = viewRef.current
-    bindWebview(view)
-    const finish = () => {
-      onStateChange("ready")
-      triggerGuestResize()
-      pollUnread()
-      applyAdBlock()
-    }
-    const fail = () => {
-      onStateChange("failed")
-      desktop()?.reportUnread(provider, 0)
-    }
-    view.addEventListener("dom-ready", applyAdBlock)
-    view.addEventListener("did-finish-load", finish)
-    view.addEventListener("did-fail-load", fail)
-    return () => {
-      view.removeEventListener("dom-ready", applyAdBlock)
-      view.removeEventListener("did-finish-load", finish)
-      view.removeEventListener("did-fail-load", fail)
-    }
-  }, [
-    onStateChange,
-    provider,
-    bindWebview,
-    triggerGuestResize,
-    pollUnread,
-    applyAdBlock,
-  ])
-
-  useEffect(() => {
-    if (provider === "custom") return
-    pollUnread()
-    const timer = window.setInterval(pollUnread, 10000)
-    return () => window.clearInterval(timer)
-  }, [pollUnread, provider])
-
-  return (
-    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
-      {createElement("webview", {
-        key: `${provider}-${url}`,
-        ref: viewRef,
-        src: url,
-        partition: `persist:${provider}`,
-        allowpopups: "true",
-        webpreferences: "backgroundThrottling=yes,contextIsolation=yes",
-        useragent:
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-        style: {
-          width: "100%",
-          height: "100%",
-          minWidth: 0,
-          minHeight: 0,
-          display: "flex",
-          flex: "1 1 0%",
-        },
-      })}
-      {zoomBadgeVisible && (
-        <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1 font-mono text-[11px] font-medium text-white shadow-lg backdrop-blur transition-opacity">
-          Zoom {formattedZoomPercent}
-        </div>
-      )}
-    </div>
-  )
-}
 
 export default function ChatPanel({
   initialProvider = "messenger",
@@ -749,8 +80,58 @@ export default function ChatPanel({
   const [performanceMode, setPerformanceMode] = useState(
     () => localStorage.getItem("bubble.performanceMode") || "Balanced",
   )
+  const [panelSize, setPanelSize] = useState({
+    width: typeof window !== "undefined" ? window.innerWidth : 375,
+    height: typeof window !== "undefined" ? window.innerHeight : 560,
+  })
+
+  useEffect(() => {
+    const handleResize = () => {
+      setPanelSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      })
+    }
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
+
+  const isCompact = panelSize.width < 340
+  const isWide = panelSize.width >= 460
+  const resizeToken = `${panelSize.width}x${panelSize.height}`
+  const [panelVisible, setPanelVisible] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const { updateInfo, openUpdateDownload } = useAppUpdate()
+  const [storageWarning, setStorageWarning] =
+    useState<StorageWarningInfo | null>(null)
+  const [warningDismissed, setWarningDismissed] = useState(false)
+  const [isCleaningStorage, setIsCleaningStorage] = useState(false)
+  const [downloadToast, setDownloadToast] =
+    useState<DownloadCompleteInfo | null>(null)
+
+  useEffect(() => {
+    const offWarn = desktop()?.onStorageWarning?.((info) => {
+      setStorageWarning(info)
+      setWarningDismissed(false)
+    })
+    const offDown = desktop()?.onDownloadComplete?.((info) => {
+      setDownloadToast(info)
+      setTimeout(() => setDownloadToast(null), 4500)
+    })
+    return () => {
+      offWarn?.()
+      offDown?.()
+    }
+  }, [])
+
+  const handleCleanCache = async () => {
+    setIsCleaningStorage(true)
+    try {
+      await desktop()?.clearCustomCache?.()
+      setStorageWarning(null)
+    } catch {}
+    setIsCleaningStorage(false)
+  }
 
   const handleSwitchPreset = (preset: Preset) => {
     const newTab: CustomTab = {
@@ -782,13 +163,23 @@ export default function ChatPanel({
         reload()
       }
     })
+    const offVisibility = desktop()?.onPanelVisibility?.(setPanelVisible)
     window.addEventListener("bubble:performance", onLocalChange)
     return () => {
       window.removeEventListener("bubble:performance", onLocalChange)
       off?.()
       offReload?.()
+      offVisibility?.()
     }
   }, [provider])
+
+  useEffect(() => {
+    if (performanceMode !== "Balanced") return
+    const timer = window.setTimeout(() => {
+      setVisitedProviders(new Set([provider]))
+    }, 60000)
+    return () => window.clearTimeout(timer)
+  }, [performanceMode, provider])
 
   const openExternal = () => {
     const url =
@@ -836,10 +227,10 @@ export default function ChatPanel({
 
   // Memory optimization strategy:
   // - Low Memory: Only mounts the active tab. All background tabs are destroyed immediately.
-  // - Balanced (Default): Lazy-mounts tabs on first visit. Messenger & Zalo stay mounted once opened.
-  //   Heavy media/custom tabs are unloaded when inactive to prevent video/audio background RAM bloat.
+  // - Balanced (Default): Lazy-mounts tabs, then unloads inactive tabs after one minute.
   // - Instant Switching: Keeps all visited tabs mounted in background.
   const keepProvidersMounted = performanceMode !== "Low Memory"
+  const shouldRenderWebviews = performanceMode !== "Low Memory" || panelVisible
 
   const mountedProviders: Provider[] = useMemo(() => {
     if (performanceMode === "Low Memory") {
@@ -859,27 +250,92 @@ export default function ChatPanel({
     })
   }, [performanceMode, visitedProviders, provider, customTab])
 
+  const handleHeaderMouseDown = useCallback(async (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (
+      target.closest("button, [role='button'], input, textarea, a, .no-drag")
+    ) {
+      return
+    }
+    if (e.button !== 0) return
+
+    e.preventDefault()
+
+    let startX = window.screenX
+    let startY = window.screenY
+    const curW = window.outerWidth || window.innerWidth
+    const curH = window.outerHeight || window.innerHeight
+
+    try {
+      const bounds = await desktop()?.getPanelBounds?.()
+      if (bounds) {
+        startX = bounds.x
+        startY = bounds.y
+      }
+    } catch {}
+
+    const startScreenX = e.screenX
+    const startScreenY = e.screenY
+
+    let rafId: number | null = null
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const dx = moveEvent.screenX - startScreenX
+      const dy = moveEvent.screenY - startScreenY
+      const nextX = Math.round(startX + dx)
+      const nextY = Math.round(startY + dy)
+
+      if (rafId) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        desktop()?.setPanelBounds?.({
+          x: nextX,
+          y: nextY,
+          width: curW,
+          height: curH,
+        })
+        if (
+          typeof window !== "undefined" &&
+          typeof window.moveTo === "function"
+        ) {
+          window.moveTo(nextX, nextY)
+        }
+      })
+    }
+
+    const onMouseUp = () => {
+      if (rafId) cancelAnimationFrame(rafId)
+      window.removeEventListener("mousemove", onMouseMove)
+      window.removeEventListener("mouseup", onMouseUp)
+    }
+
+    window.addEventListener("mousemove", onMouseMove)
+    window.addEventListener("mouseup", onMouseUp)
+  }, [])
+
   return (
     <div className="relative flex h-full w-full min-h-0 max-w-full flex-col overflow-hidden border-border bg-panel text-foreground">
-      {/* ultra-compact header without bulky toolbar */}
+      {/* Header with tabs */}
       <div
-        className="flex min-w-0 items-center justify-between border-b border-border/40 bg-card/50 px-2 py-1 select-none"
+        className="flex min-w-0 items-center justify-between border-b border-border/30 bg-card/40 px-1.5 py-0.5 select-none cursor-grab active:cursor-grabbing"
         onContextMenu={(e) => {
           e.preventDefault()
           setMenuOpen((prev) => !prev)
         }}
+        onMouseDown={handleHeaderMouseDown}
       >
-        <div className="flex min-w-0 items-center gap-1 rounded-[8px] bg-muted/60 p-0.5">
+        <div className="flex min-w-0 items-center gap-0.5 rounded-lg bg-muted/40 p-0.5">
           <ProviderTab
             provider="messenger"
             active={provider === "messenger"}
             unread={unread.messenger}
+            compact={isCompact}
             onClick={() => selectProvider("messenger")}
           />
           <ProviderTab
             provider="zalo"
             active={provider === "zalo"}
             unread={unread.zalo}
+            compact={isCompact}
             onClick={() => selectProvider("zalo")}
           />
           {customTab && (
@@ -889,6 +345,7 @@ export default function ChatPanel({
               unread={unread.custom || 0}
               customName={customTab.name}
               customColor={customTab.color}
+              compact={isCompact}
               onClick={() => selectProvider("custom")}
               onRemove={() => setConfirmRemove(true)}
               onContextMenu={(e) => {
@@ -903,85 +360,141 @@ export default function ChatPanel({
               type="button"
               onClick={() => setAddModalOpen(true)}
               title={t("addNewTab")}
-              className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-[6px] text-muted-foreground/70 transition-all hover:bg-card hover:text-foreground active:scale-95 cursor-pointer"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-card/60 hover:text-foreground active:scale-95 cursor-pointer"
             >
-              <Plus size={13} />
+              <Plus size={11} />
             </button>
           )}
         </div>
 
-        {/* Minimal options toggle */}
-        <div className="relative">
-          <button
-            onClick={() => setMenuOpen((open) => !open)}
-            title={t("options")}
-            aria-label={t("options")}
-            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-muted/80 hover:text-foreground cursor-pointer"
-          >
-            <MoreHorizontal size={13} />
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-6 z-30 w-[190px] rounded-[10px] border border-border bg-panel p-1.5 shadow-e3">
+        {/* Action Controls & Options */}
+        <div className="flex items-center gap-0.5">
+          {isWide && (
+            <>
               <button
-                onClick={() => {
-                  reload()
-                  setMenuOpen(false)
-                }}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] hover:bg-muted cursor-pointer"
+                type="button"
+                onClick={reload}
+                title={t("reload")}
+                aria-label={t("reload")}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-muted/80 hover:text-foreground active:scale-95 cursor-pointer"
               >
-                <RotateCw size={13} /> {t("reload")}
+                <RotateCw size={12} />
               </button>
               <button
-                onClick={() => {
-                  openExternal()
-                  setMenuOpen(false)
-                }}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] hover:bg-muted cursor-pointer"
+                type="button"
+                onClick={openExternal}
+                title={t("openInBrowser")}
+                aria-label={t("openInBrowser")}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-muted/80 hover:text-foreground active:scale-95 cursor-pointer"
               >
-                <ExternalLink size={13} /> {t("openInBrowser")}
-              </button>
-              {customTab && (
-                <button
-                  onClick={() => {
-                    setMenuOpen(false)
-                    setConfirmRemove(true)
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] text-danger hover:bg-muted cursor-pointer"
-                >
-                  <Trash2 size={13} />{" "}
-                  {t("removeCustomTab", { name: customTab.name })}
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setMenuOpen(false)
-                  desktop()?.openProvider("settings")
-                }}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] hover:bg-muted cursor-pointer"
-              >
-                <Settings2 size={13} /> {t("openSettings")}
+                <ExternalLink size={12} />
               </button>
               <button
-                onClick={() => {
-                  setMenuOpen(false)
-                  desktop()?.resetPanelSize()
-                }}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] hover:bg-muted cursor-pointer"
+                type="button"
+                onClick={resetPanelPosition}
+                title={t("resetPanelPosition")}
+                aria-label={t("resetPanelPosition")}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-muted/80 hover:text-foreground active:scale-95 cursor-pointer"
               >
-                <RotateCcw size={13} /> {t("resetPanelSize")}
+                <LocateFixed size={12} />
               </button>
-              <div className="my-1 h-px bg-border" />
-              <button
-                onClick={() => {
-                  desktop()?.collapsePanel()
-                  setMenuOpen(false)
-                }}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] text-danger hover:bg-muted cursor-pointer"
-              >
-                <Minus size={13} /> {t("collapsePanel")}
-              </button>
-            </div>
+              <div className="mx-0.5 h-3 w-px bg-border/40" />
+            </>
           )}
+
+          {/* Options menu */}
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen((open) => !open)}
+              title={t("options")}
+              aria-label={t("options")}
+              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-muted/80 hover:text-foreground active:scale-95 cursor-pointer"
+            >
+              <MoreHorizontal size={13} />
+            </button>
+            {menuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-20"
+                  onClick={() => setMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-8 z-30 w-[200px] rounded-xl border border-border/60 bg-panel/95 backdrop-blur-lg p-1 shadow-e3 animate-scale-in stagger-children">
+                  <button
+                    onClick={() => {
+                      reload()
+                      setMenuOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted cursor-pointer animate-fade-in"
+                  >
+                    <RotateCw size={15} className="text-muted-foreground" />{" "}
+                    {t("reload")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      openExternal()
+                      setMenuOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted cursor-pointer animate-fade-in"
+                  >
+                    <ExternalLink size={15} className="text-muted-foreground" />{" "}
+                    {t("openInBrowser")}
+                  </button>
+                  {customTab && (
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false)
+                        setConfirmRemove(true)
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-danger transition-colors hover:bg-danger/10 cursor-pointer animate-fade-in"
+                    >
+                      <Trash2 size={15} />{" "}
+                      {t("removeCustomTab", { name: customTab.name })}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false)
+                      desktop()?.openProvider("settings")
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted cursor-pointer animate-fade-in"
+                  >
+                    <Settings2 size={15} className="text-muted-foreground" />{" "}
+                    {t("openSettings")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false)
+                      resetPanelPosition()
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted cursor-pointer animate-fade-in"
+                  >
+                    <LocateFixed size={15} className="text-muted-foreground" />{" "}
+                    {t("resetPanelPosition")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false)
+                      resetPanelSize()
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted cursor-pointer animate-fade-in"
+                  >
+                    <RotateCcw size={15} className="text-muted-foreground" />{" "}
+                    {t("resetPanelSize")}
+                  </button>
+                  <div className="my-0.5 mx-2 h-px bg-border/50" />
+                  <button
+                    onClick={() => {
+                      desktop()?.collapsePanel()
+                      setMenuOpen(false)
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-danger transition-colors hover:bg-danger/10 cursor-pointer animate-fade-in"
+                  >
+                    <Minus size={15} /> {t("collapsePanel")}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -998,9 +511,44 @@ export default function ChatPanel({
         </button>
       )}
 
+      {storageWarning && provider === "custom" && !warningDismissed && (
+        <div className="flex items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/15 px-2.5 py-1 text-xs text-amber-200 backdrop-blur-md animate-fade-in select-none">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <AlertTriangle size={13} className="text-amber-400 shrink-0" />
+            <span className="truncate text-[11px]">
+              {t("storageWarningBanner", {
+                name: customTab?.name || "Tab 3",
+                size: storageWarning.sizeMB,
+                threshold: storageWarning.thresholdMB,
+              })}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleCleanCache}
+              disabled={isCleaningStorage}
+              className="rounded bg-amber-500/25 hover:bg-amber-500/40 text-amber-200 px-1.5 py-0.5 font-medium transition-colors cursor-pointer text-[10px] disabled:opacity-50"
+            >
+              {isCleaningStorage ? t("cleaning") : t("clearCacheOnly")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setWarningDismissed(true)}
+              className="text-amber-400/70 hover:text-amber-200 transition-colors cursor-pointer p-0.5"
+              title={t("dismiss")}
+              aria-label={t("dismiss")}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* main embedded area */}
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-        {state === "ready" && keepProvidersMounted ? (
+        {!shouldRenderWebviews ? null : state === "ready" &&
+          keepProvidersMounted ? (
           <div className="relative h-full w-full flex-1">
             {mountedProviders.map((item) => (
               <div
@@ -1009,9 +557,15 @@ export default function ChatPanel({
                   provider === item ? "" : "invisible pointer-events-none"
                 }`}
               >
-                <WebView
+                <ChatWebView
                   provider={item}
-                  customTab={item === "custom" ? customTab : undefined}
+                  url={
+                    item === "custom"
+                      ? customTab?.url || "about:blank"
+                      : defaultMeta[item].url
+                  }
+                  active={provider === item}
+                  resizeToken={resizeToken}
                   onStateChange={(nextState) => {
                     if (provider === item) {
                       setState(nextState)
@@ -1022,12 +576,18 @@ export default function ChatPanel({
             ))}
           </div>
         ) : state === "ready" ? (
-          <WebView
+          <ChatWebView
             key={`${provider}-${reloadKey}-${
               provider === "custom" ? customTab?.url : ""
             }`}
             provider={provider}
-            customTab={provider === "custom" ? customTab : undefined}
+            url={
+              provider === "custom"
+                ? customTab?.url || "about:blank"
+                : defaultMeta[provider].url
+            }
+            active
+            resizeToken={resizeToken}
             onStateChange={setState}
           />
         ) : (
@@ -1062,12 +622,21 @@ export default function ChatPanel({
             />
             <div
               style={{
-                top: Math.min(tabContextMenu.y + 6, 280),
-                left: Math.max(10, Math.min(tabContextMenu.x - 20, 160)),
+                top: Math.min(
+                  tabContextMenu.y + 6,
+                  Math.max(10, panelSize.height - 300),
+                ),
+                left: Math.max(
+                  10,
+                  Math.min(
+                    tabContextMenu.x - 20,
+                    Math.max(10, panelSize.width - 240),
+                  ),
+                ),
               }}
-              className="fixed z-50 w-[215px] rounded-[10px] border border-border bg-panel p-1.5 shadow-e3 text-foreground select-none"
+              className="fixed z-50 w-[230px] rounded-xl border border-border/60 bg-panel/95 backdrop-blur-lg p-1 shadow-e3 text-foreground select-none animate-scale-in stagger-children"
             >
-              <div className="px-2 py-1 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">
+              <div className="px-2.5 py-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
                 {t("switchTabQuickly")}
               </div>
 
@@ -1079,24 +648,24 @@ export default function ChatPanel({
                     key={p.name}
                     type="button"
                     onClick={() => handleSwitchPreset(p)}
-                    className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors hover:bg-muted cursor-pointer ${
+                    className={`flex w-full items-center justify-between gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted cursor-pointer animate-fade-in ${
                       isCurrent
-                        ? "font-medium bg-muted/60 text-foreground"
+                        ? "bg-muted/60 text-foreground"
                         : "text-foreground/90"
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <Icon size={14} style={{ color: p.color }} />
+                    <div className="flex items-center gap-2.5">
+                      <Icon size={16} style={{ color: p.color }} />
                       <span>{p.name}</span>
                     </div>
-                    {isCurrent && <Check size={13} className="text-primary" />}
+                    {isCurrent && <Check size={15} className="text-primary" />}
                   </button>
                 )
               })}
 
-              <div className="my-1 border-t border-border/50" />
+              <div className="my-0.5 mx-2 border-t border-border/50" />
 
-              <div className="px-2 py-0.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
+              <div className="px-2.5 py-1 text-[10.5px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
                 {t("chatAndAi")}
               </div>
 
@@ -1107,22 +676,22 @@ export default function ChatPanel({
                     key={p.name}
                     type="button"
                     onClick={() => handleSwitchPreset(p)}
-                    className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors hover:bg-muted cursor-pointer ${
+                    className={`flex w-full items-center justify-between gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted cursor-pointer animate-fade-in ${
                       isCurrent
-                        ? "font-medium bg-muted/60 text-foreground"
+                        ? "bg-muted/60 text-foreground"
                         : "text-foreground/90"
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <Globe size={14} style={{ color: p.color }} />
+                    <div className="flex items-center gap-2.5">
+                      <Globe size={16} style={{ color: p.color }} />
                       <span>{p.name}</span>
                     </div>
-                    {isCurrent && <Check size={13} className="text-primary" />}
+                    {isCurrent && <Check size={15} className="text-primary" />}
                   </button>
                 )
               })}
 
-              <div className="my-1 border-t border-border/50" />
+              <div className="my-0.5 mx-2 border-t border-border/50" />
 
               <button
                 type="button"
@@ -1130,9 +699,9 @@ export default function ChatPanel({
                   setTabContextMenu(null)
                   setAddModalOpen(true)
                 }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] hover:bg-muted cursor-pointer text-foreground/90"
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium hover:bg-muted cursor-pointer text-foreground/90 animate-fade-in"
               >
-                <Plus size={13} className="opacity-70" />
+                <Plus size={15} className="text-muted-foreground" />
                 <span>{t("switchCustomUrl")}</span>
               </button>
 
@@ -1142,9 +711,9 @@ export default function ChatPanel({
                   setTabContextMenu(null)
                   reload()
                 }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] hover:bg-muted cursor-pointer text-foreground/90"
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium hover:bg-muted cursor-pointer text-foreground/90 animate-fade-in"
               >
-                <RotateCw size={13} className="opacity-70" />
+                <RotateCw size={15} className="text-muted-foreground" />
                 <span>{t("reload")}</span>
               </button>
 
@@ -1154,15 +723,33 @@ export default function ChatPanel({
                   setTabContextMenu(null)
                   setConfirmRemove(true)
                 }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] text-danger hover:bg-muted cursor-pointer"
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-danger hover:bg-danger/10 cursor-pointer animate-fade-in"
               >
-                <Trash2 size={13} />
+                <Trash2 size={15} />
                 <span>{t("removeThisTab")}</span>
               </button>
             </div>
           </>
         )}
       </div>
+
+      {downloadToast && (
+        <div className="absolute bottom-2.5 left-2.5 right-2.5 z-40 flex items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-card/95 px-3 py-2 text-xs text-foreground shadow-xl backdrop-blur-md animate-scale-in">
+          <div className="flex items-center gap-2 min-w-0">
+            <Check size={14} className="text-emerald-400 shrink-0" />
+            <span className="truncate font-medium text-[11px]">
+              {t("downloadComplete", { name: downloadToast.fileName })}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => desktop()?.openSessionStorage()}
+            className="text-[11px] text-primary hover:underline shrink-0 cursor-pointer font-medium"
+          >
+            {t("openFolder")}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

@@ -3,8 +3,9 @@ import ChatPanel from "../components/ChatPanel"
 import type { Provider } from "../components/ChatPanel"
 import SettingsWindow from "../components/SettingsWindow"
 import LockScreen from "../components/LockScreen"
-import { desktop } from "./bridge"
+import { desktop, resetPanelPosition } from "./bridge"
 import { withTransitionSuppression } from "../utils/theme"
+import ResizeHandles from "../components/ResizeHandles"
 
 /** Renderer for the frameless, transparent panel window. */
 export default function PanelWindow() {
@@ -39,6 +40,14 @@ export default function PanelWindow() {
         }
       })
       .catch(() => {})
+
+    try {
+      const savedInit = localStorage.getItem("bubble.defaultDockAppliedV8")
+      if (!savedInit) {
+        localStorage.setItem("bubble.defaultDockAppliedV8", "true")
+        resetPanelPosition()
+      }
+    } catch {}
 
     const media = window.matchMedia("(prefers-color-scheme: dark)")
     const onMediaChange = (e: MediaQueryListEvent) => {
@@ -129,18 +138,20 @@ export default function PanelWindow() {
         isDark ? "dark" : ""
       } h-screen w-screen bg-transparent select-none`}
     >
-      <div
-        className="h-full w-full overflow-hidden rounded-[16px] border border-border/80 bg-panel"
-        style={{ opacity: opacity / 100 }}
-      >
-        {isLocked ? (
-          <LockScreen onUnlocked={() => setIsLocked(false)} />
-        ) : view === "settings" ? (
-          <SettingsWindow onClose={() => setView("chat")} />
-        ) : (
-          <ChatPanel initialProvider={provider} />
-        )}
-      </div>
+      <ResizeHandles>
+        <div
+          className="h-full w-full overflow-hidden rounded-[16px] border border-border/80 bg-panel"
+          style={{ opacity: opacity / 100 }}
+        >
+          {isLocked ? (
+            <LockScreen onUnlocked={() => setIsLocked(false)} />
+          ) : view === "settings" ? (
+            <SettingsWindow onClose={() => desktop()?.openProvider(provider)} />
+          ) : (
+            <ChatPanel initialProvider={provider} />
+          )}
+        </div>
+      </ResizeHandles>
     </div>
   )
 }

@@ -30,7 +30,10 @@ contextBridge.exposeInMainWorld("desktop", {
   openProvider: (which) => ipcRenderer.send("provider:open", which),
   quit: () => ipcRenderer.send("app:quit"),
   collapsePanel: () => ipcRenderer.send("panel:collapse"),
+  resetPanelPosition: () => ipcRenderer.send("panel:resetPosition"),
   resetPanelSize: () => ipcRenderer.send("panel:resetSize"),
+  getPanelBounds: () => ipcRenderer.invoke("panel:getBounds"),
+  setPanelBounds: (bounds) => ipcRenderer.send("panel:setBounds", bounds),
   openExternal: (url) => ipcRenderer.send("open:external", url),
   setLoginItem: (enabled) => ipcRenderer.send("settings:login", enabled),
   setAlwaysOnTop: (enabled) =>
@@ -62,13 +65,31 @@ contextBridge.exposeInMainWorld("desktop", {
     ipcRenderer.on("settings:performance", handler)
     return () => ipcRenderer.removeListener("settings:performance", handler)
   },
+  onPanelVisibility: (cb) => {
+    const handler = (_e, visible) => cb(Boolean(visible))
+    ipcRenderer.on("panel:visibility", handler)
+    return () => ipcRenderer.removeListener("panel:visibility", handler)
+  },
   onReloadProvider: (cb) => {
     const handler = (_e, provider) => cb(provider)
     ipcRenderer.on("provider:reload", handler)
     return () => ipcRenderer.removeListener("provider:reload", handler)
   },
   getMemoryUsage: () => ipcRenderer.invoke("system:getMemory"),
-  trimMemory: () => ipcRenderer.invoke("system:trimMemory"),
+  getStorageUsage: () => ipcRenderer.invoke("storage:getUsage"),
+  clearCustomCache: () => ipcRenderer.invoke("storage:clearCustomCache"),
+  setStorageThreshold: (thresholdMB) =>
+    ipcRenderer.send("settings:setStorageThreshold", thresholdMB),
+  onStorageWarning: (cb) => {
+    const handler = (_e, info) => cb(info)
+    ipcRenderer.on("storage:warning", handler)
+    return () => ipcRenderer.removeListener("storage:warning", handler)
+  },
+  onDownloadComplete: (cb) => {
+    const handler = (_e, info) => cb(info)
+    ipcRenderer.on("storage:downloadComplete", handler)
+    return () => ipcRenderer.removeListener("storage:downloadComplete", handler)
+  },
   getLockStatus: () => ipcRenderer.invoke("totp:getStatus"),
   verifyTotp: (code) => ipcRenderer.invoke("totp:verify", code),
   onLockState: (cb) => {

@@ -147,41 +147,41 @@ export default function LockScreen({
         <button
           type="button"
           onClick={() => desktop()?.collapsePanel()}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground/60 transition-all hover:bg-muted hover:text-foreground active:scale-95 cursor-pointer"
           title="Thu nhỏ"
         >
-          <Minus size={15} />
+          <Minus size={16} />
         </button>
       </div>
 
       {/* Main Lock Card */}
-      <div className="flex w-full max-w-[280px] flex-col items-center text-center">
-        <div className="relative mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-danger/10 text-danger shadow-inner">
+      <div className="flex w-full max-w-[300px] flex-col items-center text-center">
+        <div className="relative mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-danger/10 text-danger shadow-inner">
           {success ? (
             <CheckCircle2
-              size={30}
-              className="text-emerald-500 animate-in zoom-in"
+              size={34}
+              className="text-emerald-500 animate-scale-in"
             />
           ) : (
-            <ShieldAlert size={30} />
+            <ShieldAlert size={34} />
           )}
         </div>
 
-        <h2 className="text-[15px] font-semibold tracking-tight text-foreground">
+        <h2 className="text-[17px] font-semibold tracking-tight text-foreground">
           {t("timeLimitReached")}
         </h2>
-        <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
+        <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">
           {t("timeLimitDesc")}
         </p>
 
         {/* 6-digit input form */}
-        <form onSubmit={handleSubmit} className="mt-6 w-full">
-          <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+        <form onSubmit={handleSubmit} className="mt-7 w-full">
+          <div className="mb-2 text-[12px] font-medium text-muted-foreground">
             {t("enterAdminOtp")}
           </div>
 
           <div
-            className={`flex justify-between gap-1.5 ${
+            className={`flex justify-between gap-2 ${
               error ? "animate-shake" : ""
             }`}
           >
@@ -199,7 +199,7 @@ export default function LockScreen({
                 disabled={loading || success || lockoutRemaining > 0}
                 onChange={(e) => handleChange(i, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(i, e)}
-                className={`h-11 w-10 rounded-xl border text-center font-mono text-[18px] font-bold transition-all outline-none ${
+                className={`h-13 w-12 rounded-xl border-2 text-center font-mono text-[20px] font-bold transition-all duration-200 outline-none ${
                   lockoutRemaining > 0
                     ? "border-danger/30 bg-muted/20 text-muted-foreground opacity-60 cursor-not-allowed"
                     : error
@@ -240,9 +240,9 @@ export default function LockScreen({
               lockoutRemaining > 0 ||
               digits.some((d) => d === "")
             }
-            className="mt-6 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-primary text-[12.5px] font-medium text-primary-foreground shadow transition-all hover:bg-primary/90 active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+            className="mt-7 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-[13px] font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-[0.98] disabled:opacity-50 cursor-pointer"
           >
-            <KeyRound size={14} />
+            <KeyRound size={16} />
             <span>{loading ? t("unlocking") : t("unlock")}</span>
           </button>
         </form>

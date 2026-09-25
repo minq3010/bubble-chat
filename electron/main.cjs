@@ -22,6 +22,13 @@ try {
   require("dotenv").config({ path: path.join(__dirname, "../.env") })
 } catch {}
 const { compareVersions, selectAsset } = require("./update-utils.cjs")
+const { summarizeMemoryMetrics } = require("./memory-utils.cjs")
+const { verifyTOTP } = require("./totp-utils.cjs")
+const {
+  STORAGE_SIZE_CACHE_TTL,
+  getDirectorySize,
+  invalidateDirectorySize,
+} = require("./storage-utils.cjs")
 const releaseConfig = require("./release-config.json")
 const ENABLE_TOTP = app.isPackaged
   ? releaseConfig.totp === true
@@ -38,7 +45,8 @@ const RELEASE_API =
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
-// Optimize Chromium RAM & V8 heap usage
+// Optimize Chromium RAM & V8 heap usage + allow seamless background media autoplay
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required")
 app.commandLine.appendSwitch("js-flags", "--max-old-space-size=256")
 app.commandLine.appendSwitch("renderer-process-limit", "3")
 app.commandLine.appendSwitch("disable-gpu-shader-disk-cache")
@@ -50,14 +58,14 @@ app.commandLine.appendSwitch(
 const BUBBLE = 88 // window size (room for bubble + shadow/badge without clipping)
 const PANEL_MARGIN = 0 // zero outer margin, no blurry outer shadow halo
 const PANEL_CONFIG = {
-  defaultWidth: 365,
-  minWidth: 240,
-  maxWidth: 390,
-  widthRatio: 0.25,
-  defaultHeight: 510,
-  minHeight: 300,
-  maxHeight: 550,
-  heightRatio: 0.57,
+  defaultWidth: 260,
+  minWidth: 200,
+  maxWidth: 960,
+  widthRatio: 0.16,
+  defaultHeight: 370,
+  minHeight: 250,
+  maxHeight: 1200,
+  heightRatio: 0.42,
 }
 const BUBBLE_ICONS = new Set(["default", "message", "spark", "heart", "bolt"])
 
@@ -78,6 +86,8 @@ let panelWasVisibleBeforeDrag = false
 let updateCheck = null
 let updateInstall = null
 let updateInfo = { status: "idle", currentVersion: app.getVersion() }
+let lastChatMemoryMB = null
+let currentPanelView = "chat"
 
 // Secret resolution for TOTP and Shadow Store HMAC signing
 let embeddedSecret = ""
@@ -400,6 +410,10 @@ rememberPosition = savedSettings.rememberPosition !== false
 snapToEdge = savedSettings.snapToEdge !== false
 let alwaysOnTop = savedSettings.alwaysOnTop !== false
 let customPanelSize = savedSettings.panelSize || null
+let customStorageThresholdMB =
+  typeof savedSettings.customStorageThresholdMB === "number"
+    ? savedSettings.customStorageThresholdMB
+    : 500
 if (savedSettings.theme) {
   nativeTheme.themeSource = savedSettings.theme.toLowerCase()
 }
@@ -500,110 +514,56 @@ if (ENABLE_TOTP) {
   })
 }
 
-// TOTP verification implementation (RFC 6238, 60-second period, ±30s tolerance)
-const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+if (ENABLE_TOTP) {
+  // Background accumulated usage timer: decrements every second while active
+  setInterval(() => {
+    if (!isLocked) {
+      const now = Date.now()
+      if (lastActiveTimestamp > 0 && now < lastActiveTimestamp - 60000) {
+        console.warn(
+          "[Security] Clock rollback detected during active session! Locking.",
+        )
+        isLocked = true
+        remainingUsageSeconds = 0
+        writeState({
+          remainingUsageSeconds: 0,
+          isLocked: true,
+          lastActiveTimestamp: now,
+        })
+        panelWin?.webContents.send("lock:status", {
+          isLocked: true,
+          remainingSeconds: 0,
+        })
+        return
+      }
 
-function base32Decode(base32) {
-  const clean = String(base32)
-    .toUpperCase()
-    .replace(/=+$/, "")
-    .replace(/[\s-]/g, "")
-  let bits = ""
-  for (let i = 0; i < clean.length; i++) {
-    const val = BASE32_ALPHABET.indexOf(clean[i])
-    if (val === -1) continue
-    bits += val.toString(2).padStart(5, "0")
-  }
-  const bytes = []
-  for (let i = 0; i + 8 <= bits.length; i += 8) {
-    bytes.push(parseInt(bits.substring(i, i + 8), 2))
-  }
-  return Buffer.from(bytes)
-}
-
-function generateHOTP(secretBuffer, counter, digits = 6) {
-  const counterBuffer = Buffer.alloc(8)
-  counterBuffer.writeBigInt64BE(BigInt(counter), 0)
-  const hmac = crypto.createHmac("sha1", secretBuffer)
-  hmac.update(counterBuffer)
-  const digest = hmac.digest()
-  const offset = digest[digest.length - 1] & 0x0f
-  const codeInt =
-    ((digest[offset] & 0x7f) << 24) |
-    ((digest[offset + 1] & 0xff) << 16) |
-    ((digest[offset + 2] & 0xff) << 8) |
-    (digest[offset + 3] & 0xff)
-  return (codeInt % Math.pow(10, digits)).toString().padStart(digits, "0")
-}
-
-function verifyTOTP(token, base32Secret, period = 60, windowTolerance = 1) {
-  if (!token || !base32Secret) return false
-  const cleanToken = String(token).trim()
-  if (cleanToken.length !== 6) return false
-  try {
-    const secretBuffer = base32Decode(base32Secret)
-    const currentCounter = Math.floor(Date.now() / 1000 / period)
-    for (let i = -windowTolerance; i <= windowTolerance; i++) {
-      if (generateHOTP(secretBuffer, currentCounter + i, 6) === cleanToken) {
-        return true
+      lastActiveTimestamp = now
+      remainingUsageSeconds = Math.max(0, remainingUsageSeconds - 1)
+      if (remainingUsageSeconds <= 0) {
+        isLocked = true
+        writeState({
+          remainingUsageSeconds: 0,
+          isLocked: true,
+          lastActiveTimestamp: now,
+        })
+        panelWin?.webContents.send("lock:status", {
+          isLocked: true,
+          remainingSeconds: 0,
+        })
       }
     }
-  } catch (err) {
-    console.error("TOTP verification error:", err)
-  }
-  return false
+  }, 1000)
+
+  // Periodic persistence
+  setInterval(() => {
+    writeState({
+      remainingUsageSeconds,
+      isLocked,
+      sessionCycleId,
+      lastActiveTimestamp,
+    })
+  }, 60000)
 }
-
-// Background accumulated usage timer: decrements every second while active
-setInterval(() => {
-  if (!ENABLE_TOTP) return
-  if (!isLocked) {
-    const now = Date.now()
-    if (lastActiveTimestamp > 0 && now < lastActiveTimestamp - 60000) {
-      console.warn(
-        "[Security] Clock rollback detected during active session! Locking.",
-      )
-      isLocked = true
-      remainingUsageSeconds = 0
-      writeState({
-        remainingUsageSeconds: 0,
-        isLocked: true,
-        lastActiveTimestamp: now,
-      })
-      panelWin?.webContents.send("lock:status", {
-        isLocked: true,
-        remainingSeconds: 0,
-      })
-      return
-    }
-
-    lastActiveTimestamp = now
-    remainingUsageSeconds = Math.max(0, remainingUsageSeconds - 1)
-    if (remainingUsageSeconds <= 0) {
-      isLocked = true
-      writeState({
-        remainingUsageSeconds: 0,
-        isLocked: true,
-        lastActiveTimestamp: now,
-      })
-      panelWin?.webContents.send("lock:status", {
-        isLocked: true,
-        remainingSeconds: 0,
-      })
-    }
-  }
-}, 1000)
-
-// Periodic persistence
-setInterval(() => {
-  if (!ENABLE_TOTP) return
-  writeState({
-    remainingUsageSeconds,
-    isLocked,
-    sessionCycleId,
-    lastActiveTimestamp,
-  })
-}, 60000)
 
 function keepBubbleOnScreen(x, y) {
   const display =
@@ -898,7 +858,7 @@ function createPanel() {
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true, // enables <webview> for Messenger/Zalo
-      backgroundThrottling: true,
+      backgroundThrottling: false,
     },
   })
   panelWin.setAlwaysOnTop(alwaysOnTop, "screen-saver")
@@ -915,6 +875,7 @@ function createPanel() {
   loadRoute(panelWin, "panel")
   panelWin.webContents.on("did-finish-load", () => {
     panelWin?.webContents.send("notifications:unread", unreadCounts)
+    panelWin?.webContents.send("panel:visibility", panelWin.isVisible())
     const now = Date.now()
     const lockoutRemainingSeconds =
       lockoutUntil > now ? Math.ceil((lockoutUntil - now) / 1000) : 0
@@ -928,6 +889,12 @@ function createPanel() {
     }
     sendUpdateInfo(panelWin)
   })
+  panelWin.on("show", () =>
+    panelWin?.webContents.send("panel:visibility", true),
+  )
+  panelWin.on("hide", () =>
+    panelWin?.webContents.send("panel:visibility", false),
+  )
   panelWin.on("closed", () => (panelWin = null))
   let panelResizeTimer = null
   panelWin.on("resize", () => {
@@ -974,43 +941,38 @@ function getPanelSize(workArea) {
   ) {
     const width = Math.min(
       Math.max(PANEL_CONFIG.minWidth, Math.round(customPanelSize.width)),
-      workArea.width,
+      Math.min(PANEL_CONFIG.maxWidth, workArea.width),
     )
     const height = Math.min(
       Math.max(PANEL_CONFIG.minHeight, Math.round(customPanelSize.height)),
-      workArea.height,
+      Math.min(PANEL_CONFIG.maxHeight, workArea.height),
     )
     return { width, height }
   }
-  const targetWidth = Math.min(
-    PANEL_CONFIG.maxWidth,
-    Math.max(
-      PANEL_CONFIG.minWidth,
-      Math.round(workArea.width * PANEL_CONFIG.widthRatio),
-    ),
-  )
-  const width = targetWidth || PANEL_CONFIG.defaultWidth
-  const targetHeight = Math.min(
-    PANEL_CONFIG.maxHeight,
-    Math.max(
-      PANEL_CONFIG.minHeight,
-      Math.round(workArea.height * PANEL_CONFIG.heightRatio),
-    ),
-  )
-  const height = targetHeight || PANEL_CONFIG.defaultHeight
+  const width = Math.min(PANEL_CONFIG.defaultWidth, workArea.width)
+  const height = Math.min(PANEL_CONFIG.defaultHeight, workArea.height)
   return { width, height }
 }
 
-/** Position the panel beside the bubble, on whichever side has more room. */
+/** Position the panel beside the bubble, on whichever side has more room, preserving current dimensions. */
 function positionPanelNearBubble() {
-  if (!bubbleWin || !panelWin) return
+  if (!bubbleWin || !panelWin || panelWin.isDestroyed()) return
   const [bx, by] = bubbleWin.getPosition()
   const disp = screen.getDisplayNearestPoint({
     x: bx + BUBBLE / 2,
     y: by + BUBBLE / 2,
   })
   const wa = disp.workArea
-  const { width, height } = getPanelSize(wa)
+  const [curW, curH] = panelWin.getSize()
+  const fallback = getPanelSize(wa)
+  const width = Math.min(
+    Math.max(PANEL_CONFIG.minWidth, curW > 0 ? curW : fallback.width),
+    wa.width,
+  )
+  const height = Math.min(
+    Math.max(PANEL_CONFIG.minHeight, curH > 0 ? curH : fallback.height),
+    wa.height,
+  )
   const spaceRight = wa.x + wa.width - (bx + BUBBLE)
   const openRight = spaceRight >= width + 8
   let px = openRight ? bx + BUBBLE + 6 : bx - width - 6
@@ -1191,12 +1153,21 @@ function showWebContextMenu(target, params, popupWindow, includeNavigation) {
 function openProvider(which) {
   if (!["messenger", "zalo", "custom", "settings"].includes(which)) return
   if (!panelWin) createPanel()
+  if (which === "settings" && currentPanelView === "chat") {
+    try {
+      lastChatMemoryMB = readAppMemory().totalMB
+    } catch {}
+  }
+  currentPanelView = which === "settings" ? "settings" : "chat"
   positionPanelNearBubble()
   panelShowTimestamp = Date.now()
   panelWin.show()
   panelWin.moveTop()
   panelWin.focus()
   panelWin.webContents.send("panel:navigate", which)
+  if (which === "custom") {
+    setTimeout(checkStorageWarning, 1200)
+  }
 }
 
 function setPerformanceMode(mode) {
@@ -1268,12 +1239,39 @@ ipcMain.on("bubble:click", () => {
   togglePanel()
 })
 ipcMain.on("panel:collapse", () => panelWin?.hide())
+ipcMain.on("panel:resetPosition", () => {
+  if (panelWin && !panelWin.isDestroyed()) {
+    positionPanelNearBubble()
+  }
+})
 ipcMain.on("panel:resetSize", () => {
   customPanelSize = null
   writeState({ panelSize: null })
   if (panelWin && !panelWin.isDestroyed()) {
+    panelWin.setSize(PANEL_CONFIG.defaultWidth, PANEL_CONFIG.defaultHeight)
     positionPanelNearBubble()
   }
+})
+ipcMain.handle("panel:getBounds", () => {
+  if (!panelWin || panelWin.isDestroyed()) return null
+  return panelWin.getBounds()
+})
+ipcMain.on("panel:setBounds", (_e, bounds) => {
+  if (!panelWin || panelWin.isDestroyed() || !bounds) return
+  const cur = panelWin.getBounds()
+  const disp = screen.getDisplayNearestPoint({ x: cur.x, y: cur.y })
+  const wa = disp.workArea
+  const width = Math.max(
+    PANEL_CONFIG.minWidth,
+    Math.min(Math.round(bounds.width), wa.width),
+  )
+  const height = Math.max(
+    PANEL_CONFIG.minHeight,
+    Math.min(Math.round(bounds.height), wa.height),
+  )
+  const x = typeof bounds.x === "number" ? Math.round(bounds.x) : cur.x
+  const y = typeof bounds.y === "number" ? Math.round(bounds.y) : cur.y
+  panelWin.setBounds({ x, y, width, height })
 })
 ipcMain.on("open:external", (_e, url) => {
   if (
@@ -1353,7 +1351,79 @@ ipcMain.handle("settings:get", () => {
       ? state.bubbleIcon
       : "default",
     panelSize: state.panelSize || null,
+    bubblePosition:
+      bubbleWin && !bubbleWin.isDestroyed()
+        ? { x: bubbleWin.getPosition()[0], y: bubbleWin.getPosition()[1] }
+        : state.bubblePosition || null,
+    customStorageThresholdMB,
   }
+})
+
+function invalidateStorageSize(provider) {
+  if (!provider) {
+    invalidateDirectorySize()
+    return
+  }
+  invalidateDirectorySize(
+    path.join(app.getPath("userData"), "Partitions", provider),
+  )
+}
+
+async function getStorageFootprint() {
+  const partitionsDir = path.join(app.getPath("userData"), "Partitions")
+  const [messengerBytes, zaloBytes, customBytes] = await Promise.all([
+    getDirectorySize(path.join(partitionsDir, "messenger")),
+    getDirectorySize(path.join(partitionsDir, "zalo")),
+    getDirectorySize(path.join(partitionsDir, "custom")),
+  ])
+  const toMB = (bytes) => Math.round((bytes / (1024 * 1024)) * 10) / 10
+  return {
+    messengerMB: toMB(messengerBytes),
+    zaloMB: toMB(zaloBytes),
+    customMB: toMB(customBytes),
+    totalMB: toMB(messengerBytes + zaloBytes + customBytes),
+    warnThresholdMB: customStorageThresholdMB,
+  }
+}
+
+let lastStorageWarningSent = 0
+async function checkStorageWarning() {
+  if (customStorageThresholdMB <= 0) return null
+  const customBytes = await getDirectorySize(
+    path.join(app.getPath("userData"), "Partitions", "custom"),
+  )
+  const customMB = Math.round((customBytes / (1024 * 1024)) * 10) / 10
+  if (customMB >= customStorageThresholdMB) {
+    const info = {
+      provider: "custom",
+      sizeMB: customMB,
+      thresholdMB: customStorageThresholdMB,
+    }
+    if (Date.now() - lastStorageWarningSent > 30000) {
+      lastStorageWarningSent = Date.now()
+      panelWin?.webContents.send("storage:warning", info)
+    }
+    return info
+  }
+  return null
+}
+
+ipcMain.handle("storage:getUsage", async () => {
+  return await getStorageFootprint()
+})
+
+ipcMain.handle("storage:clearCustomCache", async () => {
+  try {
+    await session.fromPartition("persist:custom").clearCache()
+  } catch {}
+  invalidateStorageSize("custom")
+  return await getStorageFootprint()
+})
+
+ipcMain.on("settings:setStorageThreshold", (_e, thresholdMB) => {
+  customStorageThresholdMB = Number(thresholdMB) || 0
+  writeState({ customStorageThresholdMB })
+  checkStorageWarning()
 })
 ipcMain.on("notifications:unread", (_e, provider, count) => {
   if (!Object.hasOwn(unreadCounts, provider)) return
@@ -1373,31 +1443,29 @@ ipcMain.on("session:clear", async (_e, provider) => {
       session.fromPartition("persist:zalo").clearCache(),
       session.fromPartition("persist:custom").clearCache(),
     ]).catch(() => {})
+    invalidateStorageSize()
   } else {
     await session
       .fromPartition(`persist:${provider}`)
       .clearStorageData()
       .catch(() => {})
+    invalidateStorageSize(provider)
     panelWin?.webContents.send("provider:reload", provider)
   }
 })
 ipcMain.on("session:openStorage", () => shell.openPath(app.getPath("userData")))
 ipcMain.on("developer:copyPhone", () => clipboard.writeText("0866007219"))
+function readAppMemory() {
+  return summarizeMemoryMetrics(app.getAppMetrics())
+}
+
 ipcMain.handle("system:getMemory", async () => {
   try {
-    const metrics = app.getAppMetrics()
-    const totalBytes = metrics.reduce(
-      (acc, m) => acc + (m.memory?.workingSetSize || 0) * 1024,
-      0,
-    )
     return {
-      totalMB: Math.max(1, Math.round(totalBytes / (1024 * 1024))),
-      metrics: metrics.map((m) => ({
-        type: m.type,
-        mb: Math.round(
-          ((m.memory?.workingSetSize || 0) * 1024) / (1024 * 1024),
-        ),
-      })),
+      ...readAppMemory(),
+      ...(Number.isFinite(lastChatMemoryMB)
+        ? { chatMB: lastChatMemoryMB }
+        : {}),
     }
   } catch {
     const mem = process.memoryUsage()
@@ -1405,16 +1473,6 @@ ipcMain.handle("system:getMemory", async () => {
       totalMB: Math.round(mem.rss / (1024 * 1024)),
     }
   }
-})
-ipcMain.handle("system:trimMemory", async () => {
-  try {
-    await Promise.all([
-      session.fromPartition("persist:messenger").clearCache(),
-      session.fromPartition("persist:zalo").clearCache(),
-      session.fromPartition("persist:custom").clearCache(),
-    ]).catch(() => {})
-  } catch {}
-  return true
 })
 ipcMain.handle("totp:getStatus", () => {
   if (!ENABLE_TOTP) return { enabled: false, isLocked: false }
@@ -1515,21 +1573,45 @@ app.whenReady().then(() => {
     "*://*.googleads.g.doubleclick.net/*",
     "*://*.googlesyndication.com/*",
     "*://*.google-analytics.com/*",
-    "*://*.youtube.com/pagead/*",
-    "*://*.youtube.com/api/stats/ads*",
-    "*://*.youtube.com/ptracking*",
     "*://spclient.wg.spotify.com/ads/*",
     "*://spclient.wg.spotify.com/ad-logic/*",
   ]
   ;["persist:messenger", "persist:zalo", "persist:custom"].forEach(
     (partition) => {
       const ses = session.fromPartition(partition)
+      const ALLOWED_PERMISSIONS = new Set([
+        "notifications",
+        "media",
+        "storage-access",
+        "persistent-storage",
+        "clipboard-read",
+        "clipboard-sanitized-write",
+        "fullscreen",
+        "downloads",
+      ])
       ses.setPermissionRequestHandler((_webContents, permission, callback) => {
-        callback(permission === "notifications" || permission === "media")
+        callback(ALLOWED_PERMISSIONS.has(permission))
       })
       ses.setPermissionCheckHandler((_webContents, permission) => {
-        return permission === "notifications" || permission === "media"
+        return ALLOWED_PERMISSIONS.has(permission)
       })
+
+      // Allow saving files and downloads from web tabs
+      ses.on("will-download", (_event, item) => {
+        const fileName = item.getFilename()
+        const savePath = path.join(app.getPath("downloads"), fileName)
+        item.setSavePath(savePath)
+
+        item.once("done", (_e, state) => {
+          if (state === "completed") {
+            panelWin?.webContents.send("storage:downloadComplete", {
+              fileName,
+              savePath,
+            })
+          }
+        })
+      })
+
       try {
         ses.webRequest.onBeforeRequest(
           { urls: AD_BLOCK_URLS },
@@ -1540,6 +1622,8 @@ app.whenReady().then(() => {
       } catch {}
     },
   )
+
+  setInterval(checkStorageWarning, STORAGE_SIZE_CACHE_TTL)
 
   createBubble()
   createPanel()

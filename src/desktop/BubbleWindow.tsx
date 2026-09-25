@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import FloatingBubble from "../components/FloatingBubble"
 import { bubbleIconNames, type BubbleIconName } from "../components/BrandIcons"
 import { desktop } from "./bridge"
@@ -38,6 +38,15 @@ export default function BubbleWindow() {
 
   const lastClickRef = useRef(0)
 
+  const syncBubblePos = useCallback(() => {
+    try {
+      localStorage.setItem(
+        "bubble.currentPos",
+        JSON.stringify({ x: window.screenX, y: window.screenY }),
+      )
+    } catch {}
+  }, [])
+
   useEffect(() => {
     document.documentElement.style.background = "transparent"
     document.body.style.background = "transparent"
@@ -61,8 +70,19 @@ export default function BubbleWindow() {
         if (bubbleIconNames.includes(settings?.bubbleIcon as BubbleIconName)) {
           setIcon(settings.bubbleIcon as BubbleIconName)
         }
+        if (settings?.bubblePosition) {
+          try {
+            localStorage.setItem(
+              "bubble.currentPos",
+              JSON.stringify(settings.bubblePosition),
+            )
+          } catch {}
+        }
       })
       .catch(() => {})
+
+    syncBubblePos()
+    const posTimer = setInterval(syncBubblePos, 1500)
 
     const media = window.matchMedia("(prefers-color-scheme: dark)")
     const onMediaChange = (e: MediaQueryListEvent) => {
@@ -130,6 +150,7 @@ export default function BubbleWindow() {
     window.addEventListener("bubble:appearance", onAppearance)
 
     return () => {
+      clearInterval(posTimer)
       media.removeEventListener("change", onMediaChange)
       offIpc?.()
       window.removeEventListener("bubble:appearance", onAppearance)
@@ -187,6 +208,7 @@ export default function BubbleWindow() {
       if (isDragging) {
         setIsDraggingVisual(false)
         desktop()?.bubbleDragEnd()
+        syncBubblePos()
       } else {
         const elapsed = Date.now() - startTime
         if (elapsed < 600) {
@@ -222,6 +244,7 @@ export default function BubbleWindow() {
         <FloatingBubble
           state={isDraggingVisual ? "dragging" : unread > 0 ? "unread" : "idle"}
           unread={unread}
+          providerUnread={unreadCounts}
           size={size}
           icon={icon}
         />
