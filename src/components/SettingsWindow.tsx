@@ -13,7 +13,6 @@ import {
   Languages,
   Trash2,
   ChevronDown,
-  Sparkles,
   Zap,
 } from "lucide-react"
 import {
@@ -155,7 +154,7 @@ function Segmented({
   value,
   onChange,
 }: {
-  options: { id: string label: string }[]
+  options: { id: string; label: string }[]
   value: string
   onChange: (v: string) => void
 }) {
