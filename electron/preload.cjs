@@ -98,4 +98,25 @@ contextBridge.exposeInMainWorld("desktop", {
     ipcRenderer.on("lock:status", handler)
     return () => ipcRenderer.removeListener("lock:status", handler)
   },
+  reportNotification: (payload) =>
+    ipcRenderer.send("notification:incoming", payload),
+  onToastShow: (cb) => {
+    const handler = (_e, data) => cb(data)
+    ipcRenderer.on("toast:show", handler)
+    return () => ipcRenderer.removeListener("toast:show", handler)
+  },
+  onToastHide: (cb) => {
+    const handler = () => cb()
+    ipcRenderer.on("toast:hide", handler)
+    return () => ipcRenderer.removeListener("toast:hide", handler)
+  },
+  toastClick: (provider) => ipcRenderer.send("toast:click", provider),
+  toastDismiss: () => ipcRenderer.send("toast:dismiss"),
+  testNotification: (provider) =>
+    ipcRenderer.send("notification:test", provider),
+  reportActiveTab: (provider) => ipcRenderer.send("panel:activeTab", provider),
+  setBubbleNotification: (enabled) =>
+    ipcRenderer.send("settings:bubbleNotification", enabled),
+  setBubbleShowMessagePreview: (enabled) =>
+    ipcRenderer.send("settings:bubbleShowMessagePreview", enabled),
 })

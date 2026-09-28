@@ -133,8 +133,8 @@ export function ProviderTab({
           : "gap-1.5 px-2 py-0.5 text-[11.5px]"
       } font-medium rounded-md ${
         active
-          ? "bg-card text-card-foreground shadow-xs"
-          : "text-muted-foreground/80 hover:bg-card/40 hover:text-foreground"
+          ? "bg-card text-card-foreground shadow-xs font-semibold"
+          : "text-muted-foreground hover:bg-card/70 hover:text-foreground"
       }`}
     >
       <Icon
@@ -268,7 +268,7 @@ export function AddTabModal({
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-3 backdrop-blur-sm animate-fade-in overflow-hidden">
-      <div className="flex w-full max-w-[340px] max-h-[92vh] overflow-y-auto flex-col rounded-2xl border border-border/60 bg-panel/95 backdrop-blur-xl p-5 shadow-e3 animate-slide-up scrollbar-thin">
+      <div className="flex w-full max-w-[340px] max-h-[92vh] overflow-y-auto flex-col rounded-2xl border border-border bg-card p-5 shadow-e3 animate-slide-up scrollbar-thin">
         <div className="flex items-center justify-between pb-2">
           <div className="flex items-center gap-2.5">
             <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary">
@@ -417,7 +417,7 @@ export function RemoveTabModal({
   const { t } = useTranslation()
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-fade-in">
-      <div className="flex w-full max-w-[300px] flex-col rounded-2xl border border-border/60 bg-panel/95 backdrop-blur-xl p-5 shadow-e3 animate-slide-up">
+      <div className="flex w-full max-w-[300px] flex-col rounded-2xl border border-border bg-card p-5 shadow-e3 animate-slide-up">
         <h4 className="text-[14px] font-semibold text-foreground">
           {t("removeTabTitle", { name: tabName })}
         </h4>

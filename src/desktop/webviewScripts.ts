@@ -1,20 +1,6 @@
 const CORE_UNREAD_COMPUTE_CODE = `
   function computeUnread() {
     try {
-      // 1. Check title first (standard across Messenger, Zalo, Telegram, WhatsApp, Discord)
-      const title = document.title || "";
-      const titleMatch =
-        title.match(/^[\\(\\[]\\s*(\\d+)\\+?\\s*[\\)\\]]/) ||
-        title.match(/[\\(\\[]\\s*(\\d+)\\+?\\s*[\\)\\]]\\s*(?:Zalo|Messenger|Facebook|Đoạn chat|Chat)/i) ||
-        title.match(/[\\(\\[](\\d+)\\+?[\\)\\]]/);
-
-      if (titleMatch) {
-        const parsed = parseInt(titleMatch[1], 10);
-        if (Number.isFinite(parsed) && parsed > 0) {
-          return Math.min(parsed, 999);
-        }
-      }
-
       const host = (window.location && window.location.hostname ? window.location.hostname : "").toLowerCase();
 
       function isVisible(el) {
@@ -25,97 +11,9 @@ const CORE_UNREAD_COMPUTE_CODE = `
         return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
       }
 
-      // 2. Specific detection for Zalo Web (chat.zalo.me, id.zalo.me)
+      // 1. Specific detection for Zalo Web (chat.zalo.me, id.zalo.me)
+      // Count strictly by number of distinct unread conversations (people who messaged), NOT total message count
       if (host.includes("zalo.me")) {
-        // Helper to extract count from Zalo FontAwesome-style icon classes (e.g. fa-1, fa-2, fa-5_Plus, fa-1_24_Line, fa-5plus_24_Line)
-        function extractZaloFaCount(root) {
-          if (!root) return 0;
-          const all = [root, ...(root.querySelectorAll ? root.querySelectorAll("*") : [])];
-          for (const node of all) {
-            const list = Array.from(node.classList || []);
-            for (const cls of list) {
-              const m = cls.match(/fa-(\\d+)(?:plus|_Plus|_(\\d+)_Line)?/i);
-              if (m) {
-                const val = parseInt(m[1], 10);
-                if (Number.isFinite(val) && val > 0) {
-                  if (cls.toLowerCase().includes("plus")) return Math.max(val, 6);
-                  return val;
-                }
-              }
-            }
-          }
-          return 0;
-        }
-
-        // A. Primary: Check message tab in left sidebar
-        const navSelectors = [
-          "[data-translate-title=\\"STR_TAB_MESSAGE\\"]",
-          "[data-translate-title=\\"STR_TAB_CHAT\\"]",
-          "[data-id=\\"div_Main_LeftMenu_Chat\\"]",
-          "#nav-tab-chat",
-          ".nav-tab-chat",
-          "div[icon=\\"chat-menu\\"]",
-          "div[class*=\\"nav-tab\\"][class*=\\"chat\\"]",
-          "div[class*=\\"nav-tab\\"][class*=\\"message\\"]",
-          "div.nav__tabs__top--item[icon*=\\"chat\\"]",
-          ".nav__tabs__top--item:first-child"
-        ];
-
-        let navTab = null;
-        for (const sel of navSelectors) {
-          const found = document.querySelector(sel);
-          if (found) { navTab = found; break; }
-        }
-
-        let sidebarCount = 0;
-        if (navTab) {
-          const badgeSelectors = [
-            "[class*=\\"leftbar-unread-badge\\"]",
-            ".z-noti-badge",
-            "[class*=\\"z-noti-badge\\"]",
-            "[class*=\\"noti-badge\\"]",
-            ".v2-badge",
-            "[class*=\\"v2-badge\\"]",
-            ".tab-red-dot",
-            ".badge-dot",
-            "[class*=\\"red-dot\\"]",
-            ".badge",
-            "[class*=\\"badge\\"]"
-          ];
-
-          let badge = null;
-          for (const bSel of badgeSelectors) {
-            const b = navTab.querySelector(bSel);
-            if (b && isVisible(b)) { badge = b; break; }
-          }
-
-          if (badge) {
-            const fa = extractZaloFaCount(badge);
-            if (fa > 0) {
-              sidebarCount = fa;
-            } else {
-              const text = (badge.textContent || "").trim();
-              if (text) {
-                const num = parseInt(text.replace(/[^0-9]/g, ""), 10);
-                if (Number.isFinite(num) && num > 0) {
-                  sidebarCount = text.includes("+") ? Math.max(num, 6) : num;
-                } else if (text.includes("+")) {
-                  sidebarCount = 6;
-                }
-              }
-              if (sidebarCount === 0) {
-                const aria = (badge.getAttribute && (badge.getAttribute("aria-label") || badge.getAttribute("title"))) || "";
-                const m = aria.match(/(\\d+)/);
-                if (m) sidebarCount = parseInt(m[1], 10);
-              }
-              if (sidebarCount === 0) {
-                sidebarCount = 1;
-              }
-            }
-          }
-        }
-
-        // B. Secondary: Check unread badges in conversation list (thread list)
         const threadSelectors = [
           ".conv-action__unread-v2",
           "[class*=\\"conv-action__unread\\"]",
@@ -124,51 +22,60 @@ const CORE_UNREAD_COMPUTE_CODE = `
           ".conv-item [class*=\\"badge\\"]",
           "[class*=\\"conv-item\\"] [class*=\\"unread\\"]",
           "[class*=\\"conv-item\\"] [class*=\\"badge\\"]",
+          ".conv-item[class*=\\"unread\\"]",
+          "[class*=\\"conv-item\\"][class*=\\"unread\\"]",
           "div[id^=\\"conv-item\\"] [class*=\\"badge\\"]",
           "div[data-id^=\\"div_ConversationList_Item\\"] [class*=\\"badge\\"]"
         ];
 
-        let threadTotal = 0;
+        const unreadConvSet = new Set();
         const convBadges = document.querySelectorAll(threadSelectors.join(", "));
-        if (convBadges.length > 0) {
-          convBadges.forEach((el) => {
-            if (!isVisible(el)) return;
-            if (
-              (el.matches && el.matches("[class*=\\"disable\\"]")) ||
-              (el.closest && (el.closest("[class*=\\"disable\\"]") || el.closest("[class*=\\"mute\\"]")))
-            ) return;
+        convBadges.forEach((el) => {
+          if (!isVisible(el)) return;
+          if (
+            (el.matches && el.matches("[class*=\\"disable\\"]")) ||
+            (el.closest && (el.closest("[class*=\\"disable\\"]") || el.closest("[class*=\\"mute\\"]")))
+          ) return;
 
-            const fa = extractZaloFaCount(el);
-            if (fa > 0) {
-              threadTotal += fa;
-              return;
-            }
-            const text = (el.textContent || "").trim();
-            if (text) {
-              const num = parseInt(text.replace(/[^0-9]/g, ""), 10);
-              if (Number.isFinite(num) && num > 0) {
-                threadTotal += text.includes("+") ? Math.max(num, 6) : num;
-                return;
-              }
-            }
-            threadTotal += 1;
-          });
+          const convContainer = el.closest("div[id^='conv-item'], div[data-id^='div_ConversationList_Item'], .conv-item, [class*='conv-item'], [role='listitem']") || el;
+          unreadConvSet.add(convContainer);
+        });
+
+        if (unreadConvSet.size > 0) {
+          return Math.min(unreadConvSet.size, 999);
         }
 
-        if (sidebarCount >= 5 && threadTotal > sidebarCount) {
-          return Math.min(threadTotal, 999);
-        }
-        if (sidebarCount > 0) {
-          return Math.min(sidebarCount, 999);
-        }
-        if (threadTotal > 0) {
-          return Math.min(threadTotal, 999);
+        // Fallback: Check if message tab in left sidebar has unread badge/dot (at least 1 conversation unread)
+        const navTab = document.querySelector(
+          "[data-translate-title=\\"STR_TAB_MESSAGE\\"], [data-translate-title=\\"STR_TAB_CHAT\\"], [data-id=\\"div_Main_LeftMenu_Chat\\"], #nav-tab-chat, .nav-tab-chat, div[icon=\\"chat-menu\\"], div[class*=\\"nav-tab\\"][class*=\\"chat\\"], div[class*=\\"nav-tab\\"][class*=\\"message\\"], div.nav__tabs__top--item[icon*=\\"chat\\"], .nav__tabs__top--item:first-child"
+        );
+        if (navTab) {
+          const badge = navTab.querySelector(
+            "[class*=\\"leftbar-unread-badge\\"], .z-noti-badge, [class*=\\"z-noti-badge\\"], [class*=\\"noti-badge\\"], .v2-badge, [class*=\\"v2-badge\\"], .tab-red-dot, .badge-dot, [class*=\\"red-dot\\"], .badge, [class*=\\"badge\\"]"
+          );
+          if (badge && isVisible(badge)) {
+            return 1;
+          }
         }
 
         const anyRedDot = document.querySelector(".tab-red-dot, [class*=\\"tab-red-dot\\"], .badge-dot");
         if (anyRedDot && isVisible(anyRedDot)) return 1;
 
         return 0;
+      }
+
+      // 2. Check title for other providers (Messenger, Telegram, WhatsApp, Discord)
+      const title = document.title || "";
+      const titleMatch =
+        title.match(/^[\\(\\[]\\s*(\\d+)\\+?\\s*[\\)\\]]/) ||
+        title.match(/[\\(\\[]\\s*(\\d+)\\+?\\s*[\\)\\]]\\s*(?:Messenger|Facebook|Đoạn chat|Chat)/i) ||
+        title.match(/[\\(\\[](\\d+)\\+?[\\)\\]]/);
+
+      if (titleMatch) {
+        const parsed = parseInt(titleMatch[1], 10);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          return Math.min(parsed, 999);
+        }
       }
 
       // 3. Specific detection for Facebook / Messenger (messenger.com, facebook.com)
@@ -252,25 +159,352 @@ export const REALTIME_OBSERVER_SCRIPT = `(() => {
 ${CORE_UNREAD_COMPUTE_CODE}
 
   let lastReported = -1;
+  let lastSnippetSignature = "";
+
+  function extractAndSendLatestSnippet(silent = false) {
+    try {
+      const host = (window.location.hostname || "").toLowerCase();
+      let payload = null;
+
+      if (host.includes("zalo")) {
+        const convNodes = Array.from(document.querySelectorAll(
+          "div[id^='conv-item'], div[data-id^='div_ConversationList_Item'], .conv-item, [class*='conv-item'], [data-id*='ConvItem']"
+        ));
+        const unreadSelector = ".conv-action__unread-v2, [class*='conv-action__unread'], [data-id*='unread'], [class*='unread'], [class*='badge'], [class*='red-dot'], [class*='dot'], .v2-badge, .z-noti-badge, .badge, [data-id*='badge']";
+        let target = convNodes.find(el => (el.matches && el.matches(unreadSelector)) || el.querySelector(unreadSelector));
+        if (!target && convNodes.length > 0) target = convNodes[0];
+        if (target) {
+          const imgEl = target.querySelector("img");
+          const icon = (imgEl && imgEl.src && imgEl.src.startsWith("http")) ? imgEl.src : "";
+
+          let title = "";
+          let body = "";
+
+          const nameEl = target.querySelector(
+            ".conv-item-title__name, [class*='title__name'], [class*='conv-item-title'], .conv-item-title, [class*='title'], [class*='name']"
+          );
+          if (nameEl) {
+            title = (nameEl.textContent || nameEl.getAttribute("aria-label") || nameEl.getAttribute("title") || "").trim();
+          }
+
+          const msgEl = target.querySelector(
+            ".conv-message, .conv-message__text, [class*='conv-message'], [class*='conv-item__message'], [class*='last-message'], [class*='snippet'], [class*='preview'], [class*='msg-info']"
+          );
+          if (msgEl) {
+            body = (msgEl.textContent || msgEl.getAttribute("aria-label") || msgEl.getAttribute("title") || "").trim();
+          }
+
+          // If body or title missing, gather all distinct visible text nodes
+          if (!body || !title) {
+            const spans = Array.from(target.querySelectorAll("span, p, div"))
+              .map(el => (el.children.length === 0 ? el.textContent.trim() : ""))
+              .filter(t => t.length > 0 && !/^(\\d+:\\d+|\\d+\\s*(phút|giờ|ngày|m|h|d|min|hr|day|days)|vừa xong|just now|\\d+\\+?)$/i.test(t));
+            const unique = [];
+            for (const s of spans) {
+              if (!unique.includes(s)) unique.push(s);
+            }
+            if (!title && unique.length > 0) title = unique[0];
+            const bodyCandidates = title ? unique.filter(t => t !== title) : unique.slice(1);
+            if (!body && bodyCandidates.length > 0) body = bodyCandidates.join(" ").trim();
+          }
+
+          if (title && body.toLowerCase().startsWith((title + ":").toLowerCase())) {
+            body = body.slice(title.length + 1).trim();
+          }
+
+          if (title || body) {
+            payload = {
+              title: title || "Zalo",
+              body: body || "",
+              icon: icon
+            };
+          }
+        }
+      } else if (host.includes("messenger") || host.includes("facebook")) {
+        const rows = Array.from(document.querySelectorAll(
+          "[role='grid'] [role='row'], [role='listitem'], div[data-testid='mwthreadlist-item'], [aria-label*='Chats'] [role='row']"
+        ));
+        let unreadRow = rows.find(r => r.querySelector("[aria-label*='chưa đọc'], [aria-label*='unread'], [aria-label*='Unread']"));
+        if (!unreadRow && rows.length > 0) unreadRow = rows[0];
+        if (unreadRow) {
+          const imgEl = unreadRow.querySelector("img");
+          const icon = (imgEl && imgEl.src && imgEl.src.startsWith("http")) ? imgEl.src : "";
+
+          const spans = Array.from(unreadRow.querySelectorAll("span[dir='auto'], span"))
+            .map(s => s.textContent.trim())
+            .filter(t => t.length > 0 && !/^(unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới|\d+:\d+|\d+\s*(phút|giờ|ngày|m|h|d|min|hr|day|days)|vừa xong|just now|·):?$/i.test(t));
+
+          const unique = [];
+          for (const s of spans) {
+            if (!unique.includes(s) && !unique.some(u => u.length > s.length && u.includes(s))) {
+              unique.push(s);
+            }
+          }
+
+          let title = unique.length > 0 ? unique[0] : "Messenger";
+          let body = unique.length > 1 ? unique.slice(1).join(" ").trim() : "";
+          body = body.replace(/^(?:unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)[:\s]+/i, "").trim();
+
+          if (title || body) {
+            payload = {
+              title: title || "Messenger",
+              body: body || "",
+              icon: icon
+            };
+          }
+        }
+      }
+
+      // Title fallback if conv list hasn't painted or had no body
+      if (!payload || !payload.body) {
+        const docTitle = document.title || "";
+        const m = docTitle.match(/^[\\(\\[]\\s*\\d+\\+?\\s*[\\)\\]]\\s*(.*?)$/);
+        if (m && m[1]) {
+          const clean = m[1].replace(/[-–—|•]\s*(?:Zalo|Messenger|Facebook).*$/i, "").trim();
+          if (clean.includes(": ")) {
+            const parts = clean.split(/:\s+/);
+            const titleFromDoc = parts[0].trim();
+            const bodyFromDoc = parts.slice(1).join(": ").trim();
+            if (bodyFromDoc) {
+              payload = {
+                title: titleFromDoc || (payload && payload.title) || (host.includes("zalo") ? "Zalo" : "Messenger"),
+                body: bodyFromDoc,
+                icon: (payload && payload.icon) || "",
+              };
+            }
+          } else if (clean && (!payload || !payload.title || payload.title === "Zalo" || payload.title === "Messenger")) {
+            if (!payload) payload = { title: clean, body: "", icon: "" };
+            else payload.title = clean;
+          }
+        }
+      }
+
+      if (payload && (payload.title || payload.body)) {
+        const sig = (payload.title || "") + "::" + (payload.body || "");
+        if (silent) {
+          lastSnippetSignature = sig;
+          return;
+        }
+        if (sig !== lastSnippetSignature) {
+          lastSnippetSignature = sig;
+          console.log("__BUBBLE_NOTIFICATION_DATA__:" + JSON.stringify(payload));
+        }
+      }
+    } catch {}
+  }
+
+  window.__bubble_extract_and_send = extractAndSendLatestSnippet;
+
   function report() {
     const count = computeUnread();
     if (count !== lastReported) {
+      if (count > lastReported && count > 0) {
+        setTimeout(extractAndSendLatestSnippet, 150);
+        setTimeout(extractAndSendLatestSnippet, 600);
+      }
       lastReported = count;
       console.log("__BUBBLE_UNREAD__:" + count);
     }
   }
 
+  // 1. Hook audio playback: chime sounds accompany incoming messages on Zalo and Messenger
   try {
-    const OrigNotification = window.Notification;
-    if (OrigNotification) {
-      window.Notification = function(title, options) {
-        console.log("__BUBBLE_NOTIF__:" + (title || ""));
-        setTimeout(report, 250);
-        setTimeout(report, 1000);
-        return new OrigNotification(title, options);
+    const origAudioPlay = HTMLAudioElement.prototype.play;
+    HTMLAudioElement.prototype.play = function() {
+      try {
+        const dur = this.duration;
+        if (!dur || dur < 5) {
+          setTimeout(extractAndSendLatestSnippet, 150);
+          setTimeout(report, 250);
+        }
+      } catch {}
+      return origAudioPlay.apply(this, arguments);
+    };
+  } catch {}
+
+  // 2. Watch for title changes
+  try {
+    let curTitle = document.title || "";
+    setInterval(() => {
+      if (document.title !== curTitle) {
+        curTitle = document.title;
+        report();
+        if (/^[\\(\\[]\\s*\\d+\\+?\\s*[\\)\\]]/.test(curTitle)) {
+          setTimeout(extractAndSendLatestSnippet, 150);
+        }
+      }
+    }, 800);
+  } catch {}
+
+  // 3. Debounced DOM observer on body to detect chat updates
+  try {
+    let mutDebounce = null;
+    const domObserver = new MutationObserver(() => {
+      if (mutDebounce) return;
+      mutDebounce = setTimeout(() => {
+        mutDebounce = null;
+        report();
+        if ((window.location.hostname || "").toLowerCase().includes("zalo")) {
+          extractAndSendLatestSnippet();
+        }
+      }, 400);
+    });
+    domObserver.observe(document.body || document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+    });
+  } catch {}
+
+  // Prime the current row so existing unread messages do not look new.
+  setTimeout(() => extractAndSendLatestSnippet(true), 800);
+
+  // Zalo can update a background conversation without changing its badge/title.
+  if ((window.location.hostname || "").toLowerCase().includes("zalo")) {
+    setInterval(() => {
+      report();
+      extractAndSendLatestSnippet();
+    }, 2000);
+  }
+
+  try {
+    function parseNotificationPayload(title, options) {
+      let titleStr = String(title || "Tin nhắn mới").trim();
+      const rawBody = (options && options.body) ? String(options.body).trim() : "";
+      let bodyStr = rawBody;
+      const genericBody = /^(?:new messages?|unread messages?|new message|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)$/i.test(bodyStr);
+      const genericTitle = /^(?:zalo|messenger|new messages?|unread messages?|new message|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)$/i.test(titleStr);
+
+      if (genericTitle && bodyStr.includes(": ")) {
+        const parts = bodyStr.split(/:\s+/);
+        titleStr = parts[0].trim();
+        bodyStr = parts.slice(1).join(": ").trim();
+      } else {
+        if (genericBody) bodyStr = "";
+        if (!bodyStr && titleStr.includes(": ")) {
+          const parts = titleStr.split(/:\s+/);
+          titleStr = parts[0].trim();
+          bodyStr = parts.slice(1).join(": ").trim();
+        }
+      }
+
+      return {
+        title: titleStr || "Tin nhắn mới",
+        body: bodyStr.replace(/^(?:unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)[:\s]+/i, "").trim(),
+        icon: (options && options.icon) ? String(options.icon) : "",
       };
-      window.Notification.permission = OrigNotification.permission;
-      window.Notification.requestPermission = OrigNotification.requestPermission.bind(OrigNotification);
+    }
+
+    function FakeNotification(title, options) {
+      try {
+        const payload = parseNotificationPayload(title, options);
+        console.log("__BUBBLE_NOTIFICATION_DATA__:" + JSON.stringify(payload));
+      } catch {}
+      console.log("__BUBBLE_NOTIF__:" + (title || ""));
+      setTimeout(report, 250);
+      setTimeout(report, 1000);
+
+      this.title = String(title || "");
+      this.body = options && options.body ? String(options.body) : "";
+      this.icon = options && options.icon ? String(options.icon) : "";
+      this.tag = options && options.tag ? String(options.tag) : "";
+      this.data = (options && options.data) || null;
+      this.onclick = null;
+      this.onshow = null;
+      this.onerror = null;
+      this.onclose = null;
+
+      setTimeout(() => {
+        if (typeof this.onshow === "function") {
+          try {
+            this.onshow(new Event("show"));
+          } catch {}
+        }
+        try {
+          this.dispatchEvent(new Event("show"));
+        } catch {}
+      }, 20);
+
+      return this;
+    }
+
+    try {
+      FakeNotification.prototype = Object.create(EventTarget.prototype);
+      FakeNotification.prototype.constructor = FakeNotification;
+    } catch {
+      FakeNotification.prototype = {};
+    }
+
+    FakeNotification.prototype.close = function() {
+      if (typeof this.onclose === "function") {
+        try {
+          this.onclose(new Event("close"));
+        } catch {}
+      }
+      try {
+        this.dispatchEvent(new Event("close"));
+      } catch {}
+    };
+
+    FakeNotification.prototype.addEventListener =
+      FakeNotification.prototype.addEventListener || function() {};
+    FakeNotification.prototype.removeEventListener =
+      FakeNotification.prototype.removeEventListener || function() {};
+    FakeNotification.prototype.dispatchEvent =
+      FakeNotification.prototype.dispatchEvent ||
+      function() {
+        return true;
+      };
+
+    try {
+      Object.defineProperty(FakeNotification, "permission", {
+        get: () => "granted",
+        set: () => {},
+        configurable: true,
+      });
+    } catch {
+      FakeNotification.permission = "granted";
+    }
+
+    FakeNotification.requestPermission = function(cb) {
+      if (typeof cb === "function") {
+        try {
+          cb("granted");
+        } catch {}
+      }
+      return Promise.resolve("granted");
+    };
+
+    FakeNotification.maxActions = 2;
+
+    window.Notification = FakeNotification;
+
+    if (navigator.permissions && navigator.permissions.query) {
+      const origQuery = navigator.permissions.query;
+      navigator.permissions.query = function(desc) {
+        if (desc && desc.name === "notifications") {
+          return Promise.resolve({ state: "granted", onchange: null });
+        }
+        return origQuery.apply(this, arguments);
+      };
+    }
+
+    if (
+      window.ServiceWorkerRegistration &&
+      window.ServiceWorkerRegistration.prototype
+    ) {
+      window.ServiceWorkerRegistration.prototype.showNotification = function(
+        title,
+        options,
+      ) {
+        try {
+          const payload = parseNotificationPayload(title, options);
+          console.log("__BUBBLE_NOTIFICATION_DATA__:" + JSON.stringify(payload));
+        } catch {}
+        setTimeout(report, 250);
+        return Promise.resolve();
+      };
     }
   } catch {}
 

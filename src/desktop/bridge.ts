@@ -68,6 +68,15 @@ export type LockStatus = {
   failedAttempts?: number
 }
 
+export type IncomingNotification = {
+  provider: "messenger" | "zalo" | "custom"
+  title: string
+  body?: string
+  icon?: string
+  direction?: "from-right" | "from-left"
+  theme?: string
+}
+
 export type DesktopBridge = {
   isElectron: true
   platform?: string
@@ -133,6 +142,15 @@ export type DesktopBridge = {
   getLockStatus?: () => Promise<LockStatus>
   verifyTotp?: (code: string) => Promise<TotpVerifyResult>
   onLockState?: (cb: (status: LockStatus) => void) => () => void
+  reportNotification?: (payload: IncomingNotification) => void
+  onToastShow?: (cb: (data: IncomingNotification) => void) => () => void
+  onToastHide?: (cb: () => void) => () => void
+  toastClick?: (provider: "messenger" | "zalo" | "custom") => void
+  toastDismiss?: () => void
+  testNotification?: (provider?: "messenger" | "zalo") => void
+  reportActiveTab?: (provider: string) => void
+  setBubbleNotification?: (enabled: boolean) => void
+  setBubbleShowMessagePreview?: (enabled: boolean) => void
 }
 
 declare global {

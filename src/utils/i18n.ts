@@ -26,6 +26,15 @@ export const translations = {
     cacheSize: "Bộ nhớ đệm",
     cleanCacheNow: "Dọn dẹp bộ nhớ đệm",
     cleanCacheSuccess: "Đã dọn dẹp bộ nhớ đệm!",
+    bubbleNotification: "Thông báo từ bong bóng",
+    bubbleNotificationDesc:
+      "Hiện thông báo dạng toast nổi cạnh bong bóng khi có tin nhắn mới.",
+    bubbleShowMessagePreview: "Hiển thị nội dung tin nhắn",
+    bubbleShowMessagePreviewDesc:
+      "Hiện trích đoạn nội dung tin nhắn trong thông báo toast (tắt nếu muốn bảo mật khi ở nơi đông người).",
+    testNotification: "Thử thông báo",
+    justNow: "vừa xong",
+    newMessage: "Tin nhắn mới",
     language: "Ngôn ngữ",
     languageDesc: "Chọn ngôn ngữ hiển thị giao diện",
     back: "Quay lại",
@@ -157,6 +166,16 @@ export const translations = {
     developer: "NHÀ PHÁT TRIỂN",
     copy: "Sao chép",
     copied: "Đã chép",
+    policies: "CHÍNH SÁCH & ĐIỀU KHOẢN",
+    privacyPolicyTitle: "Chính sách quyền riêng tư",
+    privacyPolicySummary:
+      "Toàn bộ dữ liệu tài khoản, phiên đăng nhập (cookies), bộ nhớ đệm và tin nhắn chỉ lưu cục bộ trên máy tính của bạn. Bubble Chat không có máy chủ trung gian và không bao giờ thu thập, lưu trữ hay chia sẻ thông tin cá nhân của người dùng.",
+    termsPolicyTitle: "Điều khoản sử dụng & Bản quyền",
+    termsPolicySummary:
+      "Bubble Chat là công cụ tiện ích mã nguồn mở hỗ trợ đa nhiệm các nền tảng chat web. Bản quyền thương hiệu Facebook Messenger thuộc Meta Platforms, Inc. Bản quyền thương hiệu Zalo thuộc VNG Corporation. Người dùng tự chịu trách nhiệm tuân thủ điều khoản dịch vụ của từng nền tảng.",
+    notificationPolicyTitle: "Chính sách thông báo & Xem trước",
+    notificationPolicySummary:
+      "Thông báo toast nổi được tạo và xử lý trực tiếp trên máy qua tiến trình nội bộ, tự hủy sau khi ẩn. Bạn có thể bật hoặc tắt tính năng hiển thị nội dung tin nhắn bất cứ lúc nào trong Cài đặt chung.",
 
     // Chat Panel
     options: "Tùy chọn",
@@ -227,6 +246,15 @@ export const translations = {
     cacheSize: "Cache storage",
     cleanCacheNow: "Clear Cache",
     cleanCacheSuccess: "Cache cleared successfully!",
+    bubbleNotification: "Bubble notifications",
+    bubbleNotificationDesc:
+      "Show popup toast notifications next to the floating bubble on new messages.",
+    bubbleShowMessagePreview: "Show message preview",
+    bubbleShowMessagePreviewDesc:
+      "Display message content snippet in toast notifications (turn off for privacy in public).",
+    testNotification: "Test notification",
+    justNow: "just now",
+    newMessage: "New message",
     language: "Language",
     languageDesc: "Choose interface display language",
     back: "Back",
@@ -356,6 +384,16 @@ export const translations = {
     developer: "DEVELOPER",
     copy: "Copy",
     copied: "Copied",
+    policies: "POLICIES & TERMS",
+    privacyPolicyTitle: "Privacy Policy",
+    privacyPolicySummary:
+      "All account data, session cookies, cache, and messages are stored strictly locally on your computer. Bubble Chat does not operate intermediate servers and never collects, transmits, or shares personal data.",
+    termsPolicyTitle: "Terms of Service & Copyright",
+    termsPolicySummary:
+      "Bubble Chat is an open-source utility client providing multitasking web chat access. Facebook Messenger is a trademark of Meta Platforms, Inc. Zalo is a trademark of VNG Corporation. Users are responsible for complying with each service's terms.",
+    notificationPolicyTitle: "Notification & Preview Policy",
+    notificationPolicySummary:
+      "Toast notifications are processed entirely on-device and destroyed after dismissal. You can toggle message content preview on or off at any time in General Settings for public privacy.",
 
     // Chat Panel
     options: "Options",

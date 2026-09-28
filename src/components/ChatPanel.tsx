@@ -79,6 +79,10 @@ export default function ChatPanel({
   const [performanceMode, setPerformanceMode] = useState(
     () => localStorage.getItem("bubble.performanceMode") || "Balanced",
   )
+
+  useEffect(() => {
+    desktop()?.reportActiveTab?.(provider)
+  }, [provider])
   const [panelSize, setPanelSize] = useState({
     width: typeof window !== "undefined" ? window.innerWidth : 375,
     height: typeof window !== "undefined" ? window.innerHeight : 560,
@@ -305,14 +309,14 @@ export default function ChatPanel({
     <div className="relative flex h-full w-full min-h-0 max-w-full flex-col overflow-hidden border-border bg-panel text-foreground">
       {/* Header with tabs */}
       <div
-        className="flex min-w-0 items-center justify-between border-b border-border/30 bg-card/40 px-1.5 py-0.5 select-none cursor-grab active:cursor-grabbing"
+        className="flex min-w-0 items-center justify-between border-b border-border/70 bg-card px-2 py-1 select-none cursor-grab active:cursor-grabbing"
         onContextMenu={(e) => {
           e.preventDefault()
           setMenuOpen((prev) => !prev)
         }}
         onMouseDown={handleHeaderMouseDown}
       >
-        <div className="flex min-w-0 items-center gap-0.5 rounded-lg bg-muted/40 p-0.5">
+        <div className="flex min-w-0 items-center gap-0.5 rounded-lg bg-muted/70 p-0.5">
           <ProviderTab
             provider="messenger"
             active={provider === "messenger"}
@@ -349,7 +353,7 @@ export default function ChatPanel({
               type="button"
               onClick={() => setAddModalOpen(true)}
               title={t("addNewTab")}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-card/60 hover:text-foreground active:scale-95 cursor-pointer"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-card hover:text-foreground active:scale-95 cursor-pointer"
             >
               <Plus size={11} />
             </button>
@@ -365,7 +369,7 @@ export default function ChatPanel({
                 onClick={reload}
                 title={t("reload")}
                 aria-label={t("reload")}
-                className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-muted/80 hover:text-foreground active:scale-95 cursor-pointer"
+                className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95 cursor-pointer"
               >
                 <RotateCw size={12} />
               </button>
@@ -374,7 +378,7 @@ export default function ChatPanel({
                 onClick={openExternal}
                 title={t("openInBrowser")}
                 aria-label={t("openInBrowser")}
-                className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-muted/80 hover:text-foreground active:scale-95 cursor-pointer"
+                className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95 cursor-pointer"
               >
                 <ExternalLink size={12} />
               </button>
@@ -383,7 +387,7 @@ export default function ChatPanel({
                 onClick={resetPanelPosition}
                 title={t("resetPanelPosition")}
                 aria-label={t("resetPanelPosition")}
-                className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-muted/80 hover:text-foreground active:scale-95 cursor-pointer"
+                className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95 cursor-pointer"
               >
                 <LocateFixed size={12} />
               </button>
@@ -397,7 +401,7 @@ export default function ChatPanel({
               onClick={() => setMenuOpen((open) => !open)}
               title={t("options")}
               aria-label={t("options")}
-              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-all hover:bg-muted/80 hover:text-foreground active:scale-95 cursor-pointer"
+              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95 cursor-pointer"
             >
               <MoreHorizontal size={13} />
             </button>
@@ -407,7 +411,7 @@ export default function ChatPanel({
                   className="fixed inset-0 z-20"
                   onClick={() => setMenuOpen(false)}
                 />
-                <div className="absolute right-0 top-8 z-30 w-[200px] rounded-xl border border-border/60 bg-panel/95 backdrop-blur-lg p-1 shadow-e3 animate-scale-in stagger-children">
+                <div className="absolute right-0 top-8 z-30 w-[200px] rounded-xl border border-border bg-card p-1 shadow-e3 animate-scale-in stagger-children">
                   <button
                     onClick={() => {
                       reload()
@@ -501,9 +505,12 @@ export default function ChatPanel({
       )}
 
       {storageWarning && provider === "custom" && !warningDismissed && (
-        <div className="flex items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/15 px-2.5 py-1 text-xs text-amber-200 backdrop-blur-md animate-fade-in select-none">
+        <div className="flex items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/15 px-2.5 py-1 text-xs text-amber-900 dark:text-amber-200 backdrop-blur-md animate-fade-in select-none">
           <div className="flex items-center gap-1.5 min-w-0">
-            <AlertTriangle size={13} className="text-amber-400 shrink-0" />
+            <AlertTriangle
+              size={13}
+              className="text-amber-600 dark:text-amber-400 shrink-0"
+            />
             <span className="truncate text-[11px]">
               {t("storageWarningBanner", {
                 name: customTab?.name || "Tab 3",
@@ -517,14 +524,14 @@ export default function ChatPanel({
               type="button"
               onClick={handleCleanCache}
               disabled={isCleaningStorage}
-              className="rounded bg-amber-500/25 hover:bg-amber-500/40 text-amber-200 px-1.5 py-0.5 font-medium transition-colors cursor-pointer text-[10px] disabled:opacity-50"
+              className="rounded bg-amber-500/20 hover:bg-amber-500/35 text-amber-950 dark:text-amber-200 px-1.5 py-0.5 font-medium transition-colors cursor-pointer text-[10px] disabled:opacity-50"
             >
               {isCleaningStorage ? t("cleaning") : t("clearCacheOnly")}
             </button>
             <button
               type="button"
               onClick={() => setWarningDismissed(true)}
-              className="text-amber-400/70 hover:text-amber-200 transition-colors cursor-pointer p-0.5"
+              className="text-amber-700 hover:text-amber-950 dark:text-amber-400/70 dark:hover:text-amber-200 transition-colors cursor-pointer p-0.5"
               title={t("dismiss")}
               aria-label={t("dismiss")}
             >
@@ -623,7 +630,7 @@ export default function ChatPanel({
                   ),
                 ),
               }}
-              className="fixed z-50 w-[230px] rounded-xl border border-border/60 bg-panel/95 backdrop-blur-lg p-1 shadow-e3 text-foreground select-none animate-scale-in stagger-children"
+              className="fixed z-50 w-[230px] rounded-xl border border-border bg-card p-1 shadow-e3 text-foreground select-none animate-scale-in stagger-children"
             >
               <div className="px-2.5 py-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
                 {t("switchTabQuickly")}

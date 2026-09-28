@@ -57,6 +57,30 @@ export default function ChatWebView({
     } catch {}
   }, [])
 
+  const lastNotifTimeRef = useRef(0)
+  const prevUnreadRef = useRef(0)
+
+  const handleReportUnread = useCallback(
+    (count: number) => {
+      const safeCount = Math.min(Math.max(0, count), 999)
+      if (safeCount > prevUnreadRef.current) {
+        const view = viewRef.current as HTMLElement & {
+          executeJavaScript?: (code: string) => Promise<unknown>
+        } | null
+        if (view && typeof view.executeJavaScript === "function") {
+          void view
+            .executeJavaScript(
+              "if (window.__bubble_extract_and_send) window.__bubble_extract_and_send();",
+            )
+            .catch(() => {})
+        }
+      }
+      prevUnreadRef.current = safeCount
+      desktop()?.reportUnread(provider, safeCount)
+    },
+    [provider],
+  )
+
   const pollUnread = useCallback(() => {
     if (!viewRef.current) return
     const view = viewRef.current as HTMLElement & {
@@ -71,13 +95,13 @@ export default function ChatWebView({
             typeof value === "number" && Number.isFinite(value)
               ? Math.max(0, Math.floor(value))
               : 0
-          desktop()?.reportUnread(provider, count)
+          handleReportUnread(count)
         })
         .catch(() => undefined)
     } catch {
       // The webview is not attached until dom-ready.
     }
-  }, [provider])
+  }, [handleReportUnread])
 
   useEffect(() => triggerGuestResize(), [resizeToken, triggerGuestResize])
 
@@ -97,7 +121,42 @@ export default function ChatWebView({
       if (match) {
         const count = parseInt(match[1], 10)
         if (Number.isFinite(count) && count >= 0) {
-          desktop()?.reportUnread(provider, Math.min(count, 999))
+          if (count > 0) {
+            const mFull = title.match(/^[\(\[]\s*\d+\+?\s*[\)\]]\s*(.*?)$/)
+            if (mFull && mFull[1]) {
+              const clean = mFull[1]
+                .replace(/[-–—|•]\s*(?:Zalo|Messenger|Facebook).*$/i, "")
+                .trim()
+              if (clean.includes(": ")) {
+                const parts = clean.split(/:\s+/)
+                const sender = parts[0].trim()
+                const message = parts
+                  .slice(1)
+                  .join(": ")
+                  .trim()
+                  .replace(
+                    /^(?:unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)[:\s]+/i,
+                    "",
+                  )
+                  .trim()
+                if (sender || message) {
+                  desktop()?.reportNotification?.({
+                    provider,
+                    title:
+                      sender || (provider === "zalo" ? "Zalo" : "Messenger"),
+                    body: message,
+                    icon: "",
+                  })
+                }
+              }
+            }
+          }
+          if (provider === "zalo") {
+            // For Zalo, count is strictly per-person/conversation, computed from DOM
+            pollUnread()
+          } else {
+            handleReportUnread(count)
+          }
         }
       } else {
         pollUnread()
@@ -106,11 +165,36 @@ export default function ChatWebView({
 
     const handleConsoleMessage = (e: any) => {
       const msg: string = e.message || ""
-      if (msg.startsWith("__BUBBLE_UNREAD__:")) {
+      if (msg.startsWith("__BUBBLE_NOTIFICATION_DATA__:")) {
+        try {
+          const raw = msg.slice("__BUBBLE_NOTIFICATION_DATA__:".length).trim()
+          const data = JSON.parse(raw)
+          lastNotifTimeRef.current = Date.now()
+          const pName =
+            provider === "zalo"
+              ? "Zalo"
+              : provider === "messenger"
+                ? "Messenger"
+                : "Tin nhắn mới"
+          const cleanBody = (data.body || "")
+            .replace(
+              /^(?:unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)[:\s]+/i,
+              "",
+            )
+            .trim()
+          desktop()?.reportNotification?.({
+            provider,
+            title: data.title || pName,
+            body: cleanBody,
+            icon: data.icon || "",
+          })
+        } catch {}
+        pollUnread()
+      } else if (msg.startsWith("__BUBBLE_UNREAD__:")) {
         const raw = msg.slice("__BUBBLE_UNREAD__:".length).trim()
         const count = parseInt(raw, 10)
         if (Number.isFinite(count) && count >= 0) {
-          desktop()?.reportUnread(provider, Math.min(count, 999))
+          handleReportUnread(count)
         }
       } else if (msg.startsWith("__BUBBLE_NOTIF__:")) {
         pollUnread()
@@ -126,6 +210,7 @@ export default function ChatWebView({
     const finish = () => {
       onStateChange("ready")
       triggerGuestResize()
+      injectObserver()
       pollUnread()
     }
     const fail = () => {
@@ -182,6 +267,7 @@ export default function ChatWebView({
           minHeight: 0,
           display: "flex",
           flex: "1 1 0%",
+          backgroundColor: "var(--panel)",
         },
       })}
       {zoomBadgeVisible && (

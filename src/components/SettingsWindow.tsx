@@ -14,6 +14,9 @@ import {
   Trash2,
   ChevronDown,
   Zap,
+  ShieldCheck,
+  FileText,
+  Lock,
 } from "lucide-react"
 import {
   AppIcon,
@@ -108,6 +111,10 @@ function ToggleRow({
       if (settingKey === "rememberPosition")
         desktop()?.setRememberPosition(next)
       if (settingKey === "snapToEdge") desktop()?.setSnapToEdge(next)
+      if (settingKey === "bubbleNotification")
+        desktop()?.setBubbleNotification?.(next)
+      if (settingKey === "bubbleShowMessagePreview")
+        desktop()?.setBubbleShowMessagePreview?.(next)
       return next
     })
   }
@@ -154,7 +161,7 @@ function Segmented({
   value,
   onChange,
 }: {
-  options: { id: string; label: string }[]
+  options: { id: string label: string }[]
   value: string
   onChange: (v: string) => void
 }) {
@@ -236,6 +243,44 @@ function GeneralPane() {
           settingKey="closeOnBlur"
           defaultOn
         />
+      </Group>
+
+      <Group title={t("bubbleNotification")}>
+        <ToggleRow
+          title={t("bubbleNotification")}
+          settingKey="bubbleNotification"
+          desc={t("bubbleNotificationDesc")}
+          defaultOn
+        />
+        <ToggleRow
+          title={t("bubbleShowMessagePreview")}
+          settingKey="bubbleShowMessagePreview"
+          desc={t("bubbleShowMessagePreviewDesc")}
+          defaultOn
+        />
+        <div className="flex items-center justify-between py-2.5">
+          <div className="min-w-0 flex-1 pr-2">
+            <div className="text-[12.5px] font-medium text-foreground">
+              {t("testNotification")}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => desktop()?.testNotification?.("messenger")}
+              className="rounded-lg border border-border/80 bg-muted/60 px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted active:scale-95 cursor-pointer"
+            >
+              Messenger
+            </button>
+            <button
+              type="button"
+              onClick={() => desktop()?.testNotification?.("zalo")}
+              className="rounded-lg border border-border/80 bg-muted/60 px-2 py-1 text-[11px] font-medium text-foreground hover:bg-muted active:scale-95 cursor-pointer"
+            >
+              Zalo
+            </button>
+          </div>
+        </div>
       </Group>
 
       <Group title={t("panelResetGroup")}>
@@ -437,7 +482,7 @@ function AppearancePane() {
               className={`grid place-items-center rounded-lg border p-2 transition-all cursor-pointer ${
                 icon === name
                   ? "border-primary bg-primary/10 ring-2 ring-primary/20 scale-105"
-                  : "border-border/70 bg-muted/30 hover:bg-muted"
+                  : "border-border/70 bg-card hover:bg-muted/60"
               }`}
             >
               <BubbleIcon name={name} size={28} />
@@ -766,6 +811,51 @@ function formatRemainingDetailed(seconds: number, lang: "vi" | "en"): string {
   return `${s}s`
 }
 
+function PolicyItem({
+  icon: Icon,
+  iconColor,
+  title,
+  content,
+}: {
+  icon: React.ComponentType<{ size?: number className?: string }>
+  iconColor: string
+  title: string
+  content: string
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="py-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full items-center justify-between gap-2.5 text-left cursor-pointer group"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div
+            className={`grid h-6 w-6 shrink-0 place-items-center rounded-md ${iconColor} bg-muted/60`}
+          >
+            <Icon size={13} />
+          </div>
+          <span className="text-[12px] font-medium text-foreground group-hover:text-primary transition-colors">
+            {title}
+          </span>
+        </div>
+        <ChevronDown
+          size={13}
+          className={`shrink-0 text-muted-foreground/60 transition-transform duration-200 ${
+            open ? "rotate-180 text-foreground" : ""
+          }`}
+        />
+      </button>
+      {open && (
+        <div className="mt-2 pl-[34px] pr-1 animate-fade-in text-[11px] leading-relaxed text-muted-foreground">
+          {content}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AboutPane({
   version,
   remainingSeconds,
@@ -858,6 +948,27 @@ function AboutPane({
           </div>
         </Group>
       )}
+
+      <Group title={t("policies")}>
+        <PolicyItem
+          icon={ShieldCheck}
+          iconColor="text-emerald-500"
+          title={t("privacyPolicyTitle")}
+          content={t("privacyPolicySummary")}
+        />
+        <PolicyItem
+          icon={FileText}
+          iconColor="text-blue-500"
+          title={t("termsPolicyTitle")}
+          content={t("termsPolicySummary")}
+        />
+        <PolicyItem
+          icon={Lock}
+          iconColor="text-amber-500"
+          title={t("notificationPolicyTitle")}
+          content={t("notificationPolicySummary")}
+        />
+      </Group>
 
       <Group title={t("developer")}>
         <div className="flex items-center justify-between gap-3 py-2.5">
@@ -972,7 +1083,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-panel select-none">
       {/* Header */}
-      <header className="flex h-11 shrink-0 items-center justify-between border-b border-border/50 bg-card/60 px-3.5">
+      <header className="flex h-11 shrink-0 items-center justify-between border-b border-border/70 bg-card px-3.5">
         <div className="flex items-center gap-2">
           <AppIcon size={18} />
           <span className="font-semibold text-[13.5px] text-foreground">
@@ -984,7 +1095,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={() => setLanguage(lang === "vi" ? "en" : "vi")}
-            className="flex items-center gap-1 rounded-lg border border-border/70 bg-card/60 px-2 py-1 font-mono text-[11px] font-semibold text-foreground/80 hover:bg-muted transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-1 rounded-lg border border-border/70 bg-muted/60 px-2 py-1 font-mono text-[11px] font-semibold text-foreground/80 hover:bg-muted transition-all active:scale-95 cursor-pointer"
             title={
               lang === "vi" ? "Switch to English" : "Chuyển sang Tiếng Việt"
             }
@@ -1004,7 +1115,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
       </header>
 
       {/* Clean Top Tab Navigation Bar */}
-      <nav className="flex shrink-0 border-b border-border/50 bg-card/30 p-1.5 gap-1">
+      <nav className="flex shrink-0 border-b border-border/60 bg-muted/50 p-1.5 gap-1">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
@@ -1016,7 +1127,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
               className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 px-2 text-[12px] font-medium transition-all duration-150 cursor-pointer ${
                 isActive
                   ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "text-muted-foreground hover:bg-card hover:text-foreground"
               }`}
             >
               <Icon
@@ -1050,7 +1161,7 @@ export default function SettingsWindow({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Subtle Footer */}
-      <footer className="flex shrink-0 items-center justify-between border-t border-border/40 bg-card/30 px-3.5 py-1.5 font-mono text-[10px] text-muted-foreground">
+      <footer className="flex shrink-0 items-center justify-between border-t border-border/60 bg-card px-3.5 py-1.5 font-mono text-[10px] text-muted-foreground">
         <span>Bubble Chat v{version}</span>
         {typeof remainingSeconds === "number" && (
           <span

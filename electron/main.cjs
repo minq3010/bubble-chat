@@ -12,6 +12,7 @@ const {
   net,
   nativeTheme,
   clipboard,
+  components,
 } = require("electron")
 const path = require("node:path")
 const fs = require("node:fs")
@@ -71,6 +72,12 @@ const BUBBLE_ICONS = new Set(["default", "message", "spark", "heart", "bolt"])
 
 let bubbleWin = null
 let panelWin = null
+let toastWin = null
+let toastHideTimer = null
+const recentNotifications = new Map()
+let lastReportedActiveProvider = "messenger"
+const TOAST_WIDTH = 320
+const TOAST_HEIGHT = 80
 let tray = null
 let dragTimer = null
 let dragOffset = null
@@ -585,11 +592,12 @@ function keepBubbleOnScreen(x, y) {
 
 /** Resolve a renderer route in dev (Vite) or prod (built file + hash). */
 function loadRoute(win, hash) {
-  if (isDev) {
-    win.loadURL(`${DEV_URL}/#${hash}`)
-  } else {
-    win.loadFile(path.join(__dirname, "../dist/index.html"), { hash })
-  }
+  const loading = isDev
+    ? win.loadURL(`${DEV_URL}/#${hash}`)
+    : win.loadFile(path.join(__dirname, "../dist/index.html"), { hash })
+  loading.catch((error) =>
+    console.error(`[Window:${hash}] Load failed:`, error),
+  )
 }
 
 function sendUpdateInfo(win) {
@@ -920,6 +928,106 @@ function createPanel() {
   })
 }
 
+function createToastWindow() {
+  if (toastWin && !toastWin.isDestroyed()) return toastWin
+  toastWin = new BrowserWindow({
+    icon: APP_ICON_PATH,
+    width: TOAST_WIDTH,
+    height: TOAST_HEIGHT,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    show: false,
+    hasShadow: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    fullscreenable: false,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+  toastWin.setAlwaysOnTop(alwaysOnTop, "screen-saver")
+  toastWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  loadRoute(toastWin, "toast")
+  toastWin.on("closed", () => (toastWin = null))
+  return toastWin
+}
+
+function showBubbleToast(data) {
+  if (!bubbleWin || bubbleWin.isDestroyed() || !bubbleWin.isVisible()) return
+  if (!data || !data.provider) return
+
+  const win = createToastWindow()
+
+  const [bx, by] = bubbleWin.getPosition()
+  const [bw, bh] = bubbleWin.getSize()
+  const disp = screen.getDisplayNearestPoint({ x: bx + bw / 2, y: by + bh / 2 })
+  const wa = disp.workArea
+
+  const isBubbleOnRight = bx + bw / 2 > wa.x + wa.width / 2
+  let tx = isBubbleOnRight ? bx - TOAST_WIDTH - 12 : bx + bw + 12
+
+  if (tx < wa.x + 8) tx = wa.x + 8
+  if (tx + TOAST_WIDTH > wa.x + wa.width - 8) {
+    tx = wa.x + wa.width - TOAST_WIDTH - 8
+  }
+
+  let ty = by + Math.round((bh - TOAST_HEIGHT) / 2)
+  if (ty < wa.y + 8) ty = wa.y + 8
+  if (ty + TOAST_HEIGHT > wa.y + wa.height - 8) {
+    ty = wa.y + wa.height - TOAST_HEIGHT - 8
+  }
+
+  win.setBounds({
+    x: Math.round(tx),
+    y: Math.round(ty),
+    width: TOAST_WIDTH,
+    height: TOAST_HEIGHT,
+  })
+
+  const state = readState()
+  const payload = {
+    ...data,
+    theme: state.theme || "System",
+    direction: isBubbleOnRight ? "from-right" : "from-left",
+  }
+
+  const sendAndShow = () => {
+    win.showInactive()
+    win.setAlwaysOnTop(alwaysOnTop, "screen-saver")
+    win.webContents.send("toast:show", payload)
+  }
+
+  if (win.webContents.isLoading()) {
+    win.webContents.once("did-finish-load", sendAndShow)
+  } else {
+    sendAndShow()
+  }
+
+  if (toastHideTimer) clearTimeout(toastHideTimer)
+  toastHideTimer = setTimeout(() => {
+    hideBubbleToast()
+  }, 6000)
+}
+
+function hideBubbleToast() {
+  if (toastHideTimer) {
+    clearTimeout(toastHideTimer)
+    toastHideTimer = null
+  }
+  if (toastWin && !toastWin.isDestroyed() && toastWin.isVisible()) {
+    toastWin.webContents.send("toast:hide")
+    setTimeout(() => {
+      if (toastWin && !toastWin.isDestroyed()) {
+        toastWin.hide()
+      }
+    }, 320)
+  }
+}
+
 function isCursorOverBubble() {
   if (!bubbleWin || bubbleWin.isDestroyed()) return false
   const cursor = screen.getCursorScreenPoint()
@@ -1152,6 +1260,8 @@ function showWebContextMenu(target, params, popupWindow, includeNavigation) {
 
 function openProvider(which) {
   if (!["messenger", "zalo", "custom", "settings"].includes(which)) return
+  hideBubbleToast()
+  lastReportedActiveProvider = which
   if (!panelWin) createPanel()
   if (which === "settings" && currentPanelView === "chat") {
     try {
@@ -1188,6 +1298,7 @@ function registerShortcuts() {
 let isDragging = false
 
 ipcMain.on("bubble:dragStart", () => {
+  hideBubbleToast()
   if (!bubbleWin) return
   stopDrag()
   isDragging = true
@@ -1234,6 +1345,7 @@ ipcMain.on("bubble:dragEnd", () => {
   panelWasVisibleBeforeDrag = false
 })
 ipcMain.on("bubble:click", () => {
+  hideBubbleToast()
   stopDrag()
   isDragging = false
   togglePanel()
@@ -1301,6 +1413,7 @@ ipcMain.on("settings:alwaysOnTop", (_e, enabled) => {
   writeState({ alwaysOnTop })
   bubbleWin?.setAlwaysOnTop(alwaysOnTop, "screen-saver")
   panelWin?.setAlwaysOnTop(alwaysOnTop, "screen-saver")
+  toastWin?.setAlwaysOnTop(alwaysOnTop, "screen-saver")
 })
 ipcMain.on("settings:closeOnBlur", (_e, enabled) => {
   closeOnBlur = Boolean(enabled)
@@ -1320,6 +1433,74 @@ ipcMain.on("settings:snapToEdge", (_e, enabled) => {
   snapToEdge = Boolean(enabled)
   writeState({ snapToEdge })
 })
+ipcMain.on("notification:incoming", (_e, payload) => {
+  if (!payload || !payload.provider) return
+  const state = readState()
+  if (state.bubbleNotification === false) return
+
+  const now = Date.now()
+  const cleanBody = (payload.body || "")
+    .replace(
+      /^(?:unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)[:\s]+/i,
+      "",
+    )
+    .replace(
+      /^(?:unread messages?|new messages?|new message|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)$/i,
+      "",
+    )
+    .trim()
+  const signature = `${payload.title || ""}::${cleanBody}`
+  const previous = recentNotifications.get(payload.provider)
+  if (previous?.signature === signature && now - previous.timestamp < 700)
+    return
+  recentNotifications.set(payload.provider, { signature, timestamp: now })
+
+  const isViewingThisProvider =
+    panelWin &&
+    panelWin.isVisible() &&
+    panelWin.isFocused() &&
+    currentPanelView === "chat" &&
+    lastReportedActiveProvider === payload.provider
+
+  if (payload.provider === "zalo" || !isViewingThisProvider) {
+    const showPreview = state.bubbleShowMessagePreview !== false
+    const finalPayload = {
+      ...payload,
+      body: showPreview ? cleanBody : "",
+    }
+    showBubbleToast(finalPayload)
+  }
+})
+ipcMain.on("toast:click", (_e, provider) => {
+  hideBubbleToast()
+  openProvider(provider || "messenger")
+})
+ipcMain.on("toast:dismiss", () => {
+  hideBubbleToast()
+})
+ipcMain.on("notification:test", (_e, provider) => {
+  const p = provider || "messenger"
+  const state = readState()
+  const showPreview = state.bubbleShowMessagePreview !== false
+  showBubbleToast({
+    provider: p,
+    title: p === "zalo" ? "Nguyễn Quốc" : "Alex Johnson",
+    body: showPreview
+      ? p === "zalo"
+        ? "Em mời cả công ty trà sữa, mọi người ra uống nhé ạ!"
+        : "Hey, are you free for a quick call?"
+      : "",
+  })
+})
+ipcMain.on("panel:activeTab", (_e, provider) => {
+  if (provider) lastReportedActiveProvider = provider
+})
+ipcMain.on("settings:bubbleNotification", (_e, enabled) => {
+  writeState({ bubbleNotification: Boolean(enabled) })
+})
+ipcMain.on("settings:bubbleShowMessagePreview", (_e, enabled) => {
+  writeState({ bubbleShowMessagePreview: Boolean(enabled) })
+})
 ipcMain.on("settings:performance", (_e, mode) => setPerformanceMode(mode))
 ipcMain.on("settings:appearance", (_e, data) => {
   const patch = {}
@@ -1336,6 +1517,7 @@ ipcMain.on("settings:appearance", (_e, data) => {
   writeState(patch)
   bubbleWin?.webContents.send("settings:appearance", patch)
   panelWin?.webContents.send("settings:appearance", patch)
+  toastWin?.webContents.send("settings:appearance", patch)
 })
 ipcMain.handle("settings:get", () => {
   const state = readState()
@@ -1360,6 +1542,8 @@ ipcMain.handle("settings:get", () => {
       bubbleWin && !bubbleWin.isDestroyed()
         ? { x: bubbleWin.getPosition()[0], y: bubbleWin.getPosition()[1] }
         : state.bubblePosition || null,
+    bubbleNotification: state.bubbleNotification !== false,
+    bubbleShowMessagePreview: state.bubbleShowMessagePreview !== false,
     customStorageThresholdMB,
   }
 })
@@ -1571,8 +1755,17 @@ ipcMain.handle("update:openDownload", async () => {
   await shell.openExternal(url)
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
+  if (app.isPackaged && components) {
+    try {
+      await components.whenReady([components.WIDEVINE_CDM_ID])
+    } catch {
+      console.warn(
+        "[Widevine] CDM is currently unavailable; continuing without DRM",
+      )
+    }
+  }
   const AD_BLOCK_URLS = [
     "*://*.doubleclick.net/*",
     "*://*.googleads.g.doubleclick.net/*",
@@ -1590,6 +1783,7 @@ app.whenReady().then(() => {
       const ALLOWED_PERMISSIONS = new Set([
         "notifications",
         "media",
+        "mediaKeySystem",
         "storage-access",
         "persistent-storage",
         "clipboard-read",
@@ -1635,6 +1829,7 @@ app.whenReady().then(() => {
 
   createBubble()
   createPanel()
+  createToastWindow()
   buildTray()
   if (app.dock) {
     try {

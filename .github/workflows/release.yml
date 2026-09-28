@@ -53,6 +53,9 @@ jobs:
       - name: Test update selection
         run: node electron/update-utils.test.cjs
 
+      - name: Test notification utilities
+        run: node electron/notification-utils.test.cjs
+
       - name: Configure TOTP from GitHub Secrets
         env:
           BUBBLE_ENABLE_TOTP: ${{ secrets.BUBBLE_ENABLE_TOTP }}
