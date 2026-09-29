@@ -9,24 +9,104 @@ import {
 import { useWebviewZoom } from "../hooks/useWebviewZoom"
 import type { Provider } from "./ChatPanelParts"
 
-function cleanNotificationText(text: string, title = ""): string {
-  let s = String(text || "")
+function cleanBidi(text: string): string {
+  return String(text || "")
     .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
     .trim()
+}
+
+function isGenericLabel(str: string): boolean {
+  const s = cleanBidi(str).toLowerCase().trim()
+  if (!s) return true
+  if (/[:\uFF1A]/.test(s)) return false
+  return (
+    /^(?:zalo|messenger|facebook|đoạn chat|chat|tin nhắn mới|các tin nhắn mới|tin mới|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|chưa đọc|new messages?|unread messages?|unseen messages?|unread)(?:[:\uFF1A\s–—\-·•|/()\[\]]*|\s*\d+\+?|\d+\s*)*$/i.test(
+      s,
+    ) ||
+    /^(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)$/i.test(
+      s,
+    )
+  )
+}
+
+function cleanNotificationText(text: string, title = ""): string {
+  let s = cleanBidi(text)
+  if (!s) return ""
+  if (isGenericLabel(s)) return ""
+
   const prefixRegex =
-    /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)[:\uFF1A\s–—\-·]+/i
-  for (let i = 0; i < 3; i++) {
+    /^(?:(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)(?:\s+(?:from|từ)\s+[^:\uFF1A–—\-·•\n]+)?(?:[:\uFF1A–—\-·•|/]+|\s+))/i
+  const suffixRegex =
+    /[:\uFF1A\s–—\-·•|/()\[\]]*(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)$/i
+  const bracketedRegex =
+    /(?:^|\s)[\(\[\{](?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|chưa đọc)[\)\]\}][:\uFF1A\s–—\-·•]*/gi
+
+  for (let i = 0; i < 5; i++) {
     const before = s
+    s = s.replace(bracketedRegex, " ").trim()
     s = s.replace(prefixRegex, "").trim()
-    if (title && s.toLowerCase().startsWith((title + ":").toLowerCase())) {
-      s = s.slice(title.length + 1).trim()
-    }
-    if (title && s.toLowerCase().startsWith((title + "：").toLowerCase())) {
-      s = s.slice(title.length + 1).trim()
+    s = s.replace(suffixRegex, "").trim()
+
+    if (title) {
+      const cleanT = cleanBidi(title).toLowerCase()
+      if (cleanT && !isGenericLabel(cleanT)) {
+        const sLower = s.toLowerCase()
+        if (sLower.startsWith(cleanT)) {
+          const rest = s.slice(cleanT.length)
+          if (/^[:\uFF1A\s–—\-·•|/]+/.test(rest)) {
+            s = rest.replace(/^[:\uFF1A\s–—\-·•|/]+/, "").trim()
+          }
+        }
+      }
     }
     if (s === before) break
   }
+  if (isGenericLabel(s)) return ""
   return s
+}
+
+interface NotificationResult {
+  title: string
+  body: string
+}
+
+function resolveNotificationTitleAndBody(
+  rawTitle: string,
+  rawBody: string,
+  fallbackProvider = "Messenger",
+): NotificationResult {
+  let title = cleanNotificationText(rawTitle || "")
+  let body = cleanNotificationText(rawBody || "", title)
+
+  if (!title || isGenericLabel(title)) {
+    const sepMatch = body.match(
+      /^([^:\uFF1A–—\-·•\n]{1,40})[:\uFF1A–—\-·•]\s*(.+)$/,
+    )
+    if (sepMatch && !isGenericLabel(sepMatch[1])) {
+      title = cleanNotificationText(sepMatch[1])
+      body = cleanNotificationText(sepMatch[2], title)
+    } else {
+      title = ""
+    }
+  }
+
+  if (!body && title) {
+    const sepMatch = title.match(
+      /^([^:\uFF1A–—\-·•\n]{1,40})[:\uFF1A–—\-·•]\s*(.+)$/,
+    )
+    if (sepMatch && !isGenericLabel(sepMatch[1])) {
+      title = cleanNotificationText(sepMatch[1])
+      body = cleanNotificationText(sepMatch[2], title)
+    }
+  }
+
+  if (isGenericLabel(title)) title = ""
+  if (isGenericLabel(body)) body = ""
+
+  return {
+    title: title || fallbackProvider,
+    body: body,
+  }
 }
 
 export default function ChatWebView({
@@ -147,22 +227,33 @@ export default function ChatWebView({
               const clean = mFull[1]
                 .replace(/[-–—|•]\s*(?:Zalo|Messenger|Facebook).*$/i, "")
                 .trim()
+              let titleCand = ""
+              let bodyCand = ""
               if (clean.includes(": ")) {
                 const parts = clean.split(/:\s+/)
-                const sender = cleanNotificationText(parts[0].trim())
-                const message = cleanNotificationText(
-                  parts.slice(1).join(": ").trim(),
-                  sender,
-                )
-                if (sender || message) {
-                  desktop()?.reportNotification?.({
-                    provider,
-                    title:
-                      sender || (provider === "zalo" ? "Zalo" : "Messenger"),
-                    body: message,
-                    icon: "",
-                  })
-                }
+                titleCand = parts[0].trim()
+                bodyCand = parts.slice(1).join(": ").trim()
+              } else {
+                titleCand = clean
+              }
+              const pName =
+                provider === "zalo"
+                  ? "Zalo"
+                  : provider === "messenger"
+                    ? "Messenger"
+                    : "Tin nhắn mới"
+              const res = resolveNotificationTitleAndBody(
+                titleCand,
+                bodyCand,
+                pName,
+              )
+              if (res.title || res.body) {
+                desktop()?.reportNotification?.({
+                  provider,
+                  title: res.title || pName,
+                  body: res.body,
+                  icon: "",
+                })
               }
             }
           }
@@ -191,12 +282,15 @@ export default function ChatWebView({
               : provider === "messenger"
                 ? "Messenger"
                 : "Tin nhắn mới"
-          const cleanTitle = cleanNotificationText(data.title || pName)
-          const cleanBody = cleanNotificationText(data.body || "", cleanTitle)
+          const res = resolveNotificationTitleAndBody(
+            data.title || "",
+            data.body || "",
+            pName,
+          )
           desktop()?.reportNotification?.({
             provider,
-            title: cleanTitle,
-            body: cleanBody,
+            title: res.title || pName,
+            body: res.body,
             icon: data.icon || "",
           })
         } catch {}

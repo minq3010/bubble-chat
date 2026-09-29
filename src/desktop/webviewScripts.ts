@@ -165,21 +165,81 @@ ${CORE_UNREAD_COMPUTE_CODE}
     return String(text || "").replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "").trim();
   }
 
-  function cleanNotificationPrefix(text, title) {
+  function isGenericLabel(str) {
+    const s = cleanBidi(str).toLowerCase().trim();
+    if (!s) return true;
+    if (/[:\uFF1A]/.test(s)) return false;
+    return (
+      /^(?:zalo|messenger|facebook|đoạn chat|chat|tin nhắn mới|các tin nhắn mới|tin mới|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|chưa đọc|new messages?|unread messages?|unseen messages?|unread)(?:[:\uFF1A\s–—\-·•|/()\[\]]*|\s*\d+\+?|\d+\s*)*$/i.test(s) ||
+      /^(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)$/i.test(s)
+    );
+  }
+
+  function cleanNotificationText(text, title = "") {
     let s = cleanBidi(text);
-    const prefixRegex = /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)[:\uFF1A\s–—\-·]+/i;
-    for (let i = 0; i < 3; i++) {
+    if (!s) return "";
+    if (isGenericLabel(s)) return "";
+
+    const prefixRegex =
+      /^(?:(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)(?:\s+(?:from|từ)\s+[^:\uFF1A–—\-·•\n]+)?(?:[:\uFF1A–—\-·•|/]+|\s+))/i;
+    const suffixRegex =
+      /[:\uFF1A\s–—\-·•|/()\[\]]*(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)$/i;
+    const bracketedRegex =
+      /(?:^|\s)[\(\[\{](?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|chưa đọc)[\)\]\}][:\uFF1A\s–—\-·•]*/gi;
+
+    for (let i = 0; i < 5; i++) {
       const before = s;
+      s = s.replace(bracketedRegex, " ").trim();
       s = s.replace(prefixRegex, "").trim();
-      if (title && s.toLowerCase().startsWith((title + ":").toLowerCase())) {
-        s = s.slice(title.length + 1).trim();
-      }
-      if (title && s.toLowerCase().startsWith((title + "：").toLowerCase())) {
-        s = s.slice(title.length + 1).trim();
+      s = s.replace(suffixRegex, "").trim();
+
+      if (title) {
+        const cleanT = cleanBidi(title).toLowerCase();
+        if (cleanT && !isGenericLabel(cleanT)) {
+          const sLower = s.toLowerCase();
+          if (sLower.startsWith(cleanT)) {
+            const rest = s.slice(cleanT.length);
+            if (/^[:\uFF1A\s–—\-·•|/]+/.test(rest)) {
+              s = rest.replace(/^[:\uFF1A\s–—\-·•|/]+/, "").trim();
+            }
+          }
+        }
       }
       if (s === before) break;
     }
+    if (isGenericLabel(s)) return "";
     return s;
+  }
+
+  function resolveNotificationTitleAndBody(rawTitle, rawBody, fallbackProvider = "Messenger") {
+    let title = cleanNotificationText(rawTitle || "");
+    let body = cleanNotificationText(rawBody || "", title);
+
+    if (!title || isGenericLabel(title)) {
+      const sepMatch = body.match(/^([^:\uFF1A–—\-·•\n]{1,40})[:\uFF1A–—\-·•]\s*(.+)$/);
+      if (sepMatch && !isGenericLabel(sepMatch[1])) {
+        title = cleanNotificationText(sepMatch[1]);
+        body = cleanNotificationText(sepMatch[2], title);
+      } else {
+        title = "";
+      }
+    }
+
+    if (!body && title) {
+      const sepMatch = title.match(/^([^:\uFF1A–—\-·•\n]{1,40})[:\uFF1A–—\-·•]\s*(.+)$/);
+      if (sepMatch && !isGenericLabel(sepMatch[1])) {
+        title = cleanNotificationText(sepMatch[1]);
+        body = cleanNotificationText(sepMatch[2], title);
+      }
+    }
+
+    if (isGenericLabel(title)) title = "";
+    if (isGenericLabel(body)) body = "";
+
+    return {
+      title: title || fallbackProvider,
+      body: body,
+    };
   }
 
   function extractAndSendLatestSnippet(silent = false) {
@@ -205,7 +265,7 @@ ${CORE_UNREAD_COMPUTE_CODE}
             ".conv-item-title__name, [class*='title__name'], [class*='conv-item-title'], .conv-item-title, [class*='title'], [class*='name']"
           );
           if (nameEl) {
-            title = cleanNotificationPrefix(nameEl.textContent || nameEl.getAttribute("aria-label") || nameEl.getAttribute("title") || "");
+            title = cleanNotificationText(nameEl.textContent || nameEl.getAttribute("aria-label") || nameEl.getAttribute("title") || "");
           }
 
           const msgEl = target.querySelector(
@@ -224,12 +284,14 @@ ${CORE_UNREAD_COMPUTE_CODE}
             for (const s of spans) {
               if (!unique.includes(s)) unique.push(s);
             }
-            if (!title && unique.length > 0) title = cleanNotificationPrefix(unique[0]);
+            if (!title && unique.length > 0) title = cleanNotificationText(unique[0]);
             const bodyCandidates = title ? unique.filter(t => t !== title) : unique.slice(1);
             if (!body && bodyCandidates.length > 0) body = bodyCandidates.join(" ").trim();
           }
 
-          body = cleanNotificationPrefix(body, title);
+          const res = resolveNotificationTitleAndBody(title, body, "Zalo");
+          title = res.title;
+          body = res.body;
 
           if (title || body) {
             payload = {
@@ -250,8 +312,8 @@ ${CORE_UNREAD_COMPUTE_CODE}
           const icon = (imgEl && imgEl.src && imgEl.src.startsWith("http")) ? imgEl.src : "";
 
           const spans = Array.from(unreadRow.querySelectorAll("span[dir='auto'], span"))
-            .map(s => cleanBidi(s.textContent))
-            .filter(t => t.length > 0 && !/^(unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|\d+:\d+|\d+\s*(phút|giờ|ngày|m|h|d|min|hr|day|days)|vừa xong|just now|·)[:\uFF1A\s–—\-·]*$/i.test(t));
+            .map(s => cleanNotificationText(s.textContent))
+            .filter(t => t.length > 0 && !isGenericLabel(t) && !/^(\d+:\d+|\d+\s*(phút|giờ|ngày|m|h|d|min|hr|day|days)|vừa xong|just now|·)$/i.test(t));
 
           const unique = [];
           for (const s of spans) {
@@ -260,9 +322,23 @@ ${CORE_UNREAD_COMPUTE_CODE}
             }
           }
 
-          let title = unique.length > 0 ? cleanNotificationPrefix(unique[0]) : "Messenger";
-          let body = unique.length > 1 ? unique.slice(1).join(" ").trim() : "";
-          body = cleanNotificationPrefix(body, title);
+          let rawTitle = "";
+          let rawBody = "";
+          if (unique.length === 1) {
+            if (unique[0].length > 20 || /[\.\,\?\!\;]/.test(unique[0]) || unique[0].includes(" ")) {
+              rawBody = unique[0];
+              rawTitle = "Messenger";
+            } else {
+              rawTitle = unique[0];
+            }
+          } else if (unique.length > 1) {
+            rawTitle = unique[0];
+            rawBody = unique.slice(1).join(" ").trim();
+          }
+
+          const res = resolveNotificationTitleAndBody(rawTitle, rawBody, "Messenger");
+          let title = res.title;
+          let body = res.body;
 
           if (title || body) {
             payload = {
@@ -277,23 +353,26 @@ ${CORE_UNREAD_COMPUTE_CODE}
       // Title fallback if conv list hasn't painted or had no body
       if (!payload || !payload.body) {
         const docTitle = document.title || "";
-        const m = docTitle.match(/^[\\(\\[]\\s*\\d+\\+?\\s*[\\)\\]]\\s*(.*?)$/);
+        const m = docTitle.match(/^[\(\[]\s*\d+\+?\s*[\)\]]\s*(.*?)$/);
         if (m && m[1]) {
           const clean = m[1].replace(/[-–—|•]\s*(?:Zalo|Messenger|Facebook).*$/i, "").trim();
+          let titleCand = "";
+          let bodyCand = "";
           if (clean.includes(": ")) {
             const parts = clean.split(/:\s+/);
-            const titleFromDoc = parts[0].trim();
-            const bodyFromDoc = parts.slice(1).join(": ").trim();
-            if (bodyFromDoc) {
-              payload = {
-                title: titleFromDoc || (payload && payload.title) || (host.includes("zalo") ? "Zalo" : "Messenger"),
-                body: bodyFromDoc,
-                icon: (payload && payload.icon) || "",
-              };
-            }
-          } else if (clean && (!payload || !payload.title || payload.title === "Zalo" || payload.title === "Messenger")) {
-            if (!payload) payload = { title: clean, body: "", icon: "" };
-            else payload.title = clean;
+            titleCand = parts[0].trim();
+            bodyCand = parts.slice(1).join(": ").trim();
+          } else {
+            titleCand = clean;
+          }
+          const hostProvider = host.includes("zalo") ? "Zalo" : "Messenger";
+          const res = resolveNotificationTitleAndBody(titleCand, bodyCand, hostProvider);
+          if (res.body || res.title) {
+            payload = {
+              title: res.title || (payload && payload.title) || hostProvider,
+              body: res.body || (payload && payload.body) || "",
+              icon: (payload && payload.icon) || "",
+            };
           }
         }
       }
@@ -389,31 +468,12 @@ ${CORE_UNREAD_COMPUTE_CODE}
 
   try {
     function parseNotificationPayload(title, options) {
-      let titleStr = cleanBidi(title || "Tin nhắn mới");
-      const rawBody = (options && options.body) ? cleanBidi(options.body) : "";
-      let bodyStr = rawBody;
-      const genericBody = /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)$/i.test(bodyStr);
-      const genericTitle = /^(?:zalo|messenger|unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)$/i.test(titleStr);
-
-      if (genericTitle && bodyStr.includes(": ")) {
-        const parts = bodyStr.split(/:\s+/);
-        titleStr = parts[0].trim();
-        bodyStr = parts.slice(1).join(": ").trim();
-      } else {
-        if (genericBody) bodyStr = "";
-        if (!bodyStr && titleStr.includes(": ")) {
-          const parts = titleStr.split(/:\s+/);
-          titleStr = parts[0].trim();
-          bodyStr = parts.slice(1).join(": ").trim();
-        }
-      }
-
-      titleStr = cleanNotificationPrefix(titleStr);
-      bodyStr = cleanNotificationPrefix(bodyStr, titleStr);
-
+      const host = (window.location.hostname || "").toLowerCase();
+      const defaultProvider = host.includes("zalo") ? "Zalo" : (host.includes("messenger") || host.includes("facebook") ? "Messenger" : "Tin nhắn mới");
+      const res = resolveNotificationTitleAndBody(title || "", (options && options.body) || "", defaultProvider);
       return {
-        title: titleStr || "Tin nhắn mới",
-        body: bodyStr,
+        title: res.title || defaultProvider,
+        body: res.body || "",
         icon: (options && options.icon) ? String(options.icon) : "",
       };
     }

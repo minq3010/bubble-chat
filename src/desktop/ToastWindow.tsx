@@ -45,6 +45,106 @@ function playChime() {
   } catch {}
 }
 
+function cleanBidi(text: string): string {
+  return String(text || "")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
+    .trim()
+}
+
+function isGenericLabel(str: string): boolean {
+  const s = cleanBidi(str).toLowerCase().trim()
+  if (!s) return true
+  if (/[:\uFF1A]/.test(s)) return false
+  return (
+    /^(?:zalo|messenger|facebook|đoạn chat|chat|tin nhắn mới|các tin nhắn mới|tin mới|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|chưa đọc|new messages?|unread messages?|unseen messages?|unread)(?:[:\uFF1A\s–—\-·•|/()\[\]]*|\s*\d+\+?|\d+\s*)*$/i.test(
+      s,
+    ) ||
+    /^(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)$/i.test(
+      s,
+    )
+  )
+}
+
+function cleanNotificationText(text: string, title = ""): string {
+  let s = cleanBidi(text)
+  if (!s) return ""
+  if (isGenericLabel(s)) return ""
+
+  const prefixRegex =
+    /^(?:(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)(?:\s+(?:from|từ)\s+[^:\uFF1A–—\-·•\n]+)?(?:[:\uFF1A–—\-·•|/]+|\s+))/i
+  const suffixRegex =
+    /[:\uFF1A\s–—\-·•|/()\[\]]*(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)$/i
+  const bracketedRegex =
+    /(?:^|\s)[\(\[\{](?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|chưa đọc)[\)\]\}][:\uFF1A\s–—\-·•]*/gi
+
+  for (let i = 0; i < 5; i++) {
+    const before = s
+    s = s.replace(bracketedRegex, " ").trim()
+    s = s.replace(prefixRegex, "").trim()
+    s = s.replace(suffixRegex, "").trim()
+
+    if (title) {
+      const cleanT = cleanBidi(title).toLowerCase()
+      if (cleanT && !isGenericLabel(cleanT)) {
+        const sLower = s.toLowerCase()
+        if (sLower.startsWith(cleanT)) {
+          const rest = s.slice(cleanT.length)
+          if (/^[:\uFF1A\s–—\-·•|/]+/.test(rest)) {
+            s = rest.replace(/^[:\uFF1A\s–—\-·•|/]+/, "").trim()
+          }
+        }
+      }
+    }
+    if (s === before) break
+  }
+  if (isGenericLabel(s)) return ""
+  return s
+}
+
+interface NotificationResult {
+  title: string
+  body: string
+}
+
+function resolveNotificationTitleAndBody(
+  rawTitle: string,
+  rawBody: string,
+  fallbackProvider = "Messenger",
+): NotificationResult {
+  let title = cleanNotificationText(rawTitle || "")
+  let body = cleanNotificationText(rawBody || "", title)
+
+  if (!title || isGenericLabel(title)) {
+    const sepMatch = body.match(
+      /^([^:\uFF1A–—\-·•\n]{1,40})[:\uFF1A–—\-·•]\s*(.+)$/,
+    )
+    if (sepMatch && !isGenericLabel(sepMatch[1])) {
+      title = cleanNotificationText(sepMatch[1])
+      body = cleanNotificationText(sepMatch[2], title)
+    } else {
+      title = ""
+    }
+  }
+
+  if (!body && title) {
+    const sepMatch = title.match(
+      /^([^:\uFF1A–—\-·•\n]{1,40})[:\uFF1A–—\-·•]\s*(.+)$/,
+    )
+    if (sepMatch && !isGenericLabel(sepMatch[1])) {
+      title = cleanNotificationText(sepMatch[1])
+      body = cleanNotificationText(sepMatch[2], title)
+    }
+  }
+
+  if (isGenericLabel(title)) title = ""
+  if (isGenericLabel(body)) body = ""
+
+  return {
+    title: title || fallbackProvider,
+    body: body,
+  }
+}
+
 export default function ToastWindow() {
   const { t } = useTranslation()
   const [data, setData] = useState<IncomingNotification | null>(null)
@@ -143,40 +243,17 @@ export default function ToastWindow() {
     desktop()?.toastDismiss?.()
   }
 
-  const prefixRegex =
-    /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)[:\uFF1A\s–—\-·]+/i
+  const fallback = data.provider === "zalo" ? "Zalo" : "Messenger"
+  const resolved = resolveNotificationTitleAndBody(
+    data.title || "",
+    data.body || "",
+    fallback,
+  )
 
-  const cleanTitle = (data.title || "")
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
-    .replace(prefixRegex, "")
-    .trim()
-
-  let cleanBody = (data.body || "")
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
-    .trim()
-  for (let i = 0; i < 3; i++) {
-    const before = cleanBody
-    cleanBody = cleanBody.replace(prefixRegex, "").trim()
-    if (
-      cleanTitle &&
-      cleanBody.toLowerCase().startsWith((cleanTitle + ":").toLowerCase())
-    ) {
-      cleanBody = cleanBody.slice(cleanTitle.length + 1).trim()
-    }
-    if (
-      cleanTitle &&
-      cleanBody.toLowerCase().startsWith((cleanTitle + "：").toLowerCase())
-    ) {
-      cleanBody = cleanBody.slice(cleanTitle.length + 1).trim()
-    }
-    if (cleanBody === before) break
-  }
-
-  const titleText =
-    cleanTitle || (data.provider === "zalo" ? "Zalo" : "Messenger")
+  const titleText = resolved.title || fallback
   const bodyText =
-    cleanBody && cleanBody.trim()
-      ? cleanBody.trim()
+    resolved.body && resolved.body.trim()
+      ? resolved.body.trim()
       : t("newMessage") || "Tin nhắn mới"
 
   return (

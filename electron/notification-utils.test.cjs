@@ -201,24 +201,99 @@ function evaluateNotificationPass(
 }
 
 // 4. Test Messenger Multi-span Text Extraction
-function cleanNotificationText(text, title = "") {
-  let s = String(text || "")
+function cleanBidi(text) {
+  return String(text || "")
     .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
     .trim()
+}
+
+function isGenericLabel(str) {
+  const s = cleanBidi(str).toLowerCase().trim()
+  if (!s) return true
+  if (/[:\uFF1A]/.test(s)) return false
+  return (
+    /^(?:zalo|messenger|facebook|đoạn chat|chat|tin nhắn mới|các tin nhắn mới|tin mới|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|chưa đọc|new messages?|unread messages?|unseen messages?|unread)(?:[:\uFF1A\s–—\-·•|/()\[\]]*|\s*\d+\+?|\d+\s*)*$/i.test(
+      s,
+    ) ||
+    /^(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)$/i.test(
+      s,
+    )
+  )
+}
+
+function cleanNotificationText(text, title = "") {
+  let s = cleanBidi(text)
+  if (!s) return ""
+  if (isGenericLabel(s)) return ""
+
   const prefixRegex =
-    /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)[:\uFF1A\s–—\-·]+/i
-  for (let i = 0; i < 3; i++) {
+    /^(?:(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)(?:\s+(?:from|từ)\s+[^:\uFF1A–—\-·•\n]+)?(?:[:\uFF1A–—\-·•|/]+|\s+))/i
+  const suffixRegex =
+    /[:\uFF1A\s–—\-·•|/()\[\]]*(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)$/i
+  const bracketedRegex =
+    /(?:^|\s)[\(\[\{](?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|chưa đọc)[\)\]\}][:\uFF1A\s–—\-·•]*/gi
+
+  for (let i = 0; i < 5; i++) {
     const before = s
+    s = s.replace(bracketedRegex, " ").trim()
     s = s.replace(prefixRegex, "").trim()
-    if (title && s.toLowerCase().startsWith((title + ":").toLowerCase())) {
-      s = s.slice(title.length + 1).trim()
-    }
-    if (title && s.toLowerCase().startsWith((title + "：").toLowerCase())) {
-      s = s.slice(title.length + 1).trim()
+    s = s.replace(suffixRegex, "").trim()
+
+    if (title) {
+      const cleanT = cleanBidi(title).toLowerCase()
+      if (cleanT && !isGenericLabel(cleanT)) {
+        const sLower = s.toLowerCase()
+        if (sLower.startsWith(cleanT)) {
+          const rest = s.slice(cleanT.length)
+          if (/^[:\uFF1A\s–—\-·•|/]+/.test(rest)) {
+            s = rest.replace(/^[:\uFF1A\s–—\-·•|/]+/, "").trim()
+          }
+        }
+      }
     }
     if (s === before) break
   }
+  if (isGenericLabel(s)) return ""
   return s
+}
+
+function resolveNotificationTitleAndBody(
+  rawTitle,
+  rawBody,
+  fallbackProvider = "Messenger",
+) {
+  let title = cleanNotificationText(rawTitle || "")
+  let body = cleanNotificationText(rawBody || "", title)
+
+  if (!title || isGenericLabel(title)) {
+    const sepMatch = body.match(
+      /^([^:\uFF1A–—\-·•\n]{1,40})[:\uFF1A–—\-·•]\s*(.+)$/,
+    )
+    if (sepMatch && !isGenericLabel(sepMatch[1])) {
+      title = cleanNotificationText(sepMatch[1])
+      body = cleanNotificationText(sepMatch[2], title)
+    } else {
+      title = ""
+    }
+  }
+
+  if (!body && title) {
+    const sepMatch = title.match(
+      /^([^:\uFF1A–—\-·•\n]{1,40})[:\uFF1A–—\-·•]\s*(.+)$/,
+    )
+    if (sepMatch && !isGenericLabel(sepMatch[1])) {
+      title = cleanNotificationText(sepMatch[1])
+      body = cleanNotificationText(sepMatch[2], title)
+    }
+  }
+
+  if (isGenericLabel(title)) title = ""
+  if (isGenericLabel(body)) body = ""
+
+  return {
+    title: title || fallbackProvider,
+    body: body,
+  }
 }
 
 function extractMessengerSpans(rawSpans) {
@@ -227,7 +302,8 @@ function extractMessengerSpans(rawSpans) {
     .filter(
       (t) =>
         t.length > 0 &&
-        !/^(unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|\d+:\d+|\d+\s*(phút|giờ|ngày|m|h|d|min|hr|day|days)|vừa xong|just now|·)[:\uFF1A\s–—\-·]*$/i.test(
+        !isGenericLabel(t) &&
+        !/^(\d+:\d+|\d+\s*(phút|giờ|ngày|m|h|d|min|hr|day|days)|vừa xong|just now|·)$/i.test(
           t,
         ),
     )
@@ -242,11 +318,24 @@ function extractMessengerSpans(rawSpans) {
     }
   }
 
-  const title =
-    unique.length > 0 ? cleanNotificationText(unique[0]) : "Messenger"
-  let body = unique.length > 1 ? unique.slice(1).join(" ").trim() : ""
-  body = cleanNotificationText(body, title)
-  return { title, body }
+  let rawTitle = ""
+  let rawBody = ""
+  if (unique.length === 1) {
+    if (
+      unique[0].length > 20 ||
+      /[\.\,\?\!\;]/.test(unique[0]) ||
+      unique[0].includes(" ")
+    ) {
+      rawBody = unique[0]
+      rawTitle = "Messenger"
+    } else {
+      rawTitle = unique[0]
+    }
+  } else if (unique.length > 1) {
+    rawTitle = unique[0]
+    rawBody = unique.slice(1).join(" ").trim()
+  }
+  return resolveNotificationTitleAndBody(rawTitle, rawBody, "Messenger")
 }
 
 {
@@ -323,6 +412,101 @@ function extractMessengerSpans(rawSpans) {
     "vừa xong",
   ]
   const res = extractMessengerSpans(isolatedSpanRow)
+  assert.equal(res.title, "Thùy Vân")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating "1 unread message" span placed before the sender name
+  const spanBeforeName = [
+    "1 unread message",
+    "Thùy Vân",
+    "Ko có em anh ăn ngon thế",
+    "vừa xong",
+  ]
+  const res = extractMessengerSpans(spanBeforeName)
+  assert.equal(res.title, "Thùy Vân")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating "1 unread message" span placed between sender name and message
+  const spanBetween = [
+    "Thùy Vân",
+    "1 unread message",
+    "Ko có em anh ăn ngon thế",
+    "vừa xong",
+  ]
+  const res = extractMessengerSpans(spanBetween)
+  assert.equal(res.title, "Thùy Vân")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating message with trailing (1 unread message)
+  const trailingBracket = [
+    "Thùy Vân",
+    "Ko có em anh ăn ngon thế (1 unread message)",
+  ]
+  const res = extractMessengerSpans(trailingBracket)
+  assert.equal(res.title, "Thùy Vân")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating message with trailing · unread message
+  const trailingDot = ["Thùy Vân", "Ko có em anh ăn ngon thế · unread message"]
+  const res = extractMessengerSpans(trailingDot)
+  assert.equal(res.title, "Thùy Vân")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating Web Push payload where title is generic "Unread message"
+  const res = resolveNotificationTitleAndBody(
+    "Unread message",
+    "Ko có em anh ăn ngon thế",
+  )
+  assert.equal(res.title, "Messenger")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating Web Push payload where title is generic "Unread message" but body has "Sender: message"
+  const res = resolveNotificationTitleAndBody(
+    "Unread message",
+    "Thùy Vân: Ko có em anh ăn ngon thế",
+  )
+  assert.equal(res.title, "Thùy Vân")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating Web Push payload where title is "Messenger" and body starts with "Unread message:"
+  const res = resolveNotificationTitleAndBody(
+    "Messenger",
+    "Unread message: Ko có em anh ăn ngon thế",
+  )
+  assert.equal(res.title, "Messenger")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating Web Push payload where title is "1 unread message"
+  const res = resolveNotificationTitleAndBody(
+    "1 unread message",
+    "Ko có em anh ăn ngon thế",
+  )
+  assert.equal(res.title, "Messenger")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating Web Push payload with "Unread message from Thùy Vân: Ko có em anh ăn ngon thế"
+  const res = resolveNotificationTitleAndBody(
+    "Thùy Vân",
+    "Unread message from Thùy Vân: Ko có em anh ăn ngon thế",
+  )
   assert.equal(res.title, "Thùy Vân")
   assert.equal(res.body, "Ko có em anh ăn ngon thế")
 }

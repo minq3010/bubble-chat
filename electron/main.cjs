@@ -1433,24 +1433,99 @@ ipcMain.on("settings:snapToEdge", (_e, enabled) => {
   snapToEdge = Boolean(enabled)
   writeState({ snapToEdge })
 })
-function cleanNotificationText(text, title = "") {
-  let s = String(text || "")
+function cleanBidi(text) {
+  return String(text || "")
     .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
     .trim()
+}
+
+function isGenericLabel(str) {
+  const s = cleanBidi(str).toLowerCase().trim()
+  if (!s) return true
+  if (/[:\uFF1A]/.test(s)) return false
+  return (
+    /^(?:zalo|messenger|facebook|đoạn chat|chat|tin nhắn mới|các tin nhắn mới|tin mới|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|chưa đọc|new messages?|unread messages?|unseen messages?|unread)(?:[:\uFF1A\s–—\-·•|/()\[\]]*|\s*\d+\+?|\d+\s*)*$/i.test(
+      s,
+    ) ||
+    /^(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)$/i.test(
+      s,
+    )
+  )
+}
+
+function cleanNotificationText(text, title = "") {
+  let s = cleanBidi(text)
+  if (!s) return ""
+  if (isGenericLabel(s)) return ""
+
   const prefixRegex =
-    /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)[:\uFF1A\s–—\-·]+/i
-  for (let i = 0; i < 3; i++) {
+    /^(?:(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)(?:\s+(?:from|từ)\s+[^:\uFF1A–—\-·•\n]+)?(?:[:\uFF1A–—\-·•|/]+|\s+))/i
+  const suffixRegex =
+    /[:\uFF1A\s–—\-·•|/()\[\]]*(?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|tin mới|chưa đọc)$/i
+  const bracketedRegex =
+    /(?:^|\s)[\(\[\{](?:\(?\d+\+?\)?\s*)?(?:unread messages?|new messages?|unseen messages?|unread|tin nhắn chưa đọc|các tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|chưa đọc)[\)\]\}][:\uFF1A\s–—\-·•]*/gi
+
+  for (let i = 0; i < 5; i++) {
     const before = s
+    s = s.replace(bracketedRegex, " ").trim()
     s = s.replace(prefixRegex, "").trim()
-    if (title && s.toLowerCase().startsWith((title + ":").toLowerCase())) {
-      s = s.slice(title.length + 1).trim()
-    }
-    if (title && s.toLowerCase().startsWith((title + "：").toLowerCase())) {
-      s = s.slice(title.length + 1).trim()
+    s = s.replace(suffixRegex, "").trim()
+
+    if (title) {
+      const cleanT = cleanBidi(title).toLowerCase()
+      if (cleanT && !isGenericLabel(cleanT)) {
+        const sLower = s.toLowerCase()
+        if (sLower.startsWith(cleanT)) {
+          const rest = s.slice(cleanT.length)
+          if (/^[:\uFF1A\s–—\-·•|/]+/.test(rest)) {
+            s = rest.replace(/^[:\uFF1A\s–—\-·•|/]+/, "").trim()
+          }
+        }
+      }
     }
     if (s === before) break
   }
+  if (isGenericLabel(s)) return ""
   return s
+}
+
+function resolveNotificationTitleAndBody(
+  rawTitle,
+  rawBody,
+  fallbackProvider = "Messenger",
+) {
+  let title = cleanNotificationText(rawTitle || "")
+  let body = cleanNotificationText(rawBody || "", title)
+
+  if (!title || isGenericLabel(title)) {
+    const sepMatch = body.match(
+      /^([^:\uFF1A–—\-·•\n]{1,40})[:\uFF1A–—\-·•]\s*(.+)$/,
+    )
+    if (sepMatch && !isGenericLabel(sepMatch[1])) {
+      title = cleanNotificationText(sepMatch[1])
+      body = cleanNotificationText(sepMatch[2], title)
+    } else {
+      title = ""
+    }
+  }
+
+  if (!body && title) {
+    const sepMatch = title.match(
+      /^([^:\uFF1A–—\-·•\n]{1,40})[:\uFF1A–—\-·•]\s*(.+)$/,
+    )
+    if (sepMatch && !isGenericLabel(sepMatch[1])) {
+      title = cleanNotificationText(sepMatch[1])
+      body = cleanNotificationText(sepMatch[2], title)
+    }
+  }
+
+  if (isGenericLabel(title)) title = ""
+  if (isGenericLabel(body)) body = ""
+
+  return {
+    title: title || fallbackProvider,
+    body: body,
+  }
 }
 
 ipcMain.on("notification:incoming", (_e, payload) => {
@@ -1459,8 +1534,14 @@ ipcMain.on("notification:incoming", (_e, payload) => {
   if (state.bubbleNotification === false) return
 
   const now = Date.now()
-  const cleanTitle = cleanNotificationText(payload.title || "")
-  const cleanBody = cleanNotificationText(payload.body || "", cleanTitle)
+  const fallback = payload.provider === "zalo" ? "Zalo" : "Messenger"
+  const resolved = resolveNotificationTitleAndBody(
+    payload.title,
+    payload.body,
+    fallback,
+  )
+  const cleanTitle = resolved.title
+  const cleanBody = resolved.body
   const signature = `${cleanTitle}::${cleanBody}`
   const previous = recentNotifications.get(payload.provider)
   if (previous?.signature === signature && now - previous.timestamp < 700)
