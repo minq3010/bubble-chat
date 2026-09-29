@@ -175,6 +175,10 @@ export default function BubbleWindow() {
   function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return
     event.preventDefault()
+    const targetEl = event.currentTarget
+    try {
+      targetEl.setPointerCapture(event.pointerId)
+    } catch {}
 
     const startX = event.screenX
     const startY = event.screenY
@@ -196,6 +200,9 @@ export default function BubbleWindow() {
     }
 
     const cleanup = () => {
+      try {
+        targetEl.releasePointerCapture(event.pointerId)
+      } catch {}
       window.removeEventListener("pointermove", onPointerMove)
       window.removeEventListener("pointerup", onPointerUp)
       window.removeEventListener("pointercancel", onPointerUp)

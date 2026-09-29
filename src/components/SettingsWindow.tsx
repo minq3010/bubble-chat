@@ -28,6 +28,7 @@ import {
   desktop,
   resetPanelPosition,
   resetPanelSize,
+  resetBubblePosition,
   type MemoryUsageResult,
   type StorageUsageResult,
 } from "../desktop/bridge"
@@ -203,6 +204,7 @@ function GeneralPane() {
   const { t } = useTranslation()
   const [resetPosDone, setResetPosDone] = useState(false)
   const [resetSizeDone, setResetSizeDone] = useState(false)
+  const [resetBubbleDone, setResetBubbleDone] = useState(false)
 
   const handleResetPos = () => {
     resetPanelPosition()
@@ -214,6 +216,12 @@ function GeneralPane() {
     resetPanelSize()
     setResetSizeDone(true)
     setTimeout(() => setResetSizeDone(false), 2000)
+  }
+
+  const handleResetBubble = () => {
+    resetBubblePosition()
+    setResetBubbleDone(true)
+    setTimeout(() => setResetBubbleDone(false), 2000)
   }
 
   const isMac =
@@ -291,11 +299,29 @@ function GeneralPane() {
           <p className="text-[11px] text-muted-foreground leading-relaxed">
             {t("panelResetDesc")}
           </p>
-          <div className="mt-2.5 grid grid-cols-2 gap-2">
+          <div className="mt-2.5 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={handleResetBubble}
+              className={`flex items-center justify-center gap-1.5 rounded-lg border py-1.5 px-2 text-[11px] font-medium transition-all active:scale-95 cursor-pointer ${
+                resetBubbleDone
+                  ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-500 font-semibold"
+                  : "border-border/80 bg-muted/60 text-foreground hover:bg-muted"
+              }`}
+            >
+              {resetBubbleDone ? (
+                <Check size={13} />
+              ) : (
+                <LocateFixed size={13} />
+              )}
+              <span>
+                {resetBubbleDone ? t("done") : t("resetBubblePosBtn")}
+              </span>
+            </button>
             <button
               type="button"
               onClick={handleResetPos}
-              className={`flex items-center justify-center gap-1.5 rounded-lg border py-1.5 px-2.5 text-[11.5px] font-medium transition-all active:scale-95 cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 rounded-lg border py-1.5 px-2 text-[11px] font-medium transition-all active:scale-95 cursor-pointer ${
                 resetPosDone
                   ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-500 font-semibold"
                   : "border-border/80 bg-muted/60 text-foreground hover:bg-muted"
@@ -307,7 +333,7 @@ function GeneralPane() {
             <button
               type="button"
               onClick={handleResetSize}
-              className={`flex items-center justify-center gap-1.5 rounded-lg border py-1.5 px-2.5 text-[11.5px] font-medium transition-all active:scale-95 cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 rounded-lg border py-1.5 px-2 text-[11px] font-medium transition-all active:scale-95 cursor-pointer ${
                 resetSizeDone
                   ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-500 font-semibold"
                   : "border-border/80 bg-muted/60 text-foreground hover:bg-muted"

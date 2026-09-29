@@ -96,6 +96,7 @@ export type DesktopBridge = {
   showContextMenu: () => void
   showBubble: () => void
   hideBubble: () => void
+  resetBubblePosition?: () => void
   openProvider: (which: "messenger" | "zalo" | "custom" | "settings") => void
   quit: () => void
   collapsePanel: () => void
@@ -253,4 +254,11 @@ export function resetPanelSize() {
  */
 export function resetPanelToDefault() {
   resetPanelPosition()
+}
+
+/**
+ * Resets the floating bubble back to a visible position on the primary display.
+ */
+export function resetBubblePosition() {
+  desktop()?.resetBubblePosition?.()
 }

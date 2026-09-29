@@ -828,6 +828,7 @@ function createBubble() {
     alwaysOnTop: true,
     skipTaskbar: true,
     fullscreenable: false,
+    type: process.platform === "linux" ? "toolbar" : undefined,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -835,7 +836,11 @@ function createBubble() {
     },
   })
   bubbleWin.setIgnoreMouseEvents(false)
-  bubbleWin.setAlwaysOnTop(alwaysOnTop, "screen-saver")
+  if (process.platform === "darwin") {
+    bubbleWin.setAlwaysOnTop(alwaysOnTop, "screen-saver")
+  } else {
+    bubbleWin.setAlwaysOnTop(alwaysOnTop)
+  }
   bubbleWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   loadRoute(bubbleWin, "bubble")
   bubbleWin.webContents.on("did-finish-load", () =>
@@ -1105,7 +1110,7 @@ function togglePanel() {
 
 /** Snap the bubble to the nearest vertical edge of its current display. */
 function snapBubble() {
-  if (!bubbleWin) return
+  if (!bubbleWin || bubbleWin.isDestroyed()) return
   const [bx, by] = bubbleWin.getPosition()
   const disp = screen.getDisplayNearestPoint({
     x: bx + BUBBLE / 2,
@@ -1114,13 +1119,36 @@ function snapBubble() {
   const wa = disp.workArea
   const center = bx + BUBBLE / 2
   const toRight = center > wa.x + wa.width / 2
-  const nx = toRight ? wa.x + wa.width - BUBBLE + 6 : wa.x - 6
+  const nx = toRight ? wa.x + wa.width - BUBBLE - 8 : wa.x + 8
   const ny = Math.min(Math.max(wa.y, by), wa.y + wa.height - BUBBLE)
   bubbleWin.setPosition(Math.round(nx), Math.round(ny))
 }
 
+function resetBubblePosition() {
+  if (!bubbleWin || bubbleWin.isDestroyed()) {
+    createBubble()
+  }
+  if (!bubbleWin || bubbleWin.isDestroyed()) return
+  const { workArea } = screen.getPrimaryDisplay()
+  const nx = workArea.x + workArea.width - BUBBLE - 16
+  const ny = workArea.y + Math.round(workArea.height * 0.35)
+  bubbleWin.setPosition(nx, ny)
+  if (!bubbleWin.isVisible()) {
+    bubbleWin.show()
+  }
+  if (process.platform === "darwin") {
+    bubbleWin.setAlwaysOnTop(alwaysOnTop, "screen-saver")
+  } else {
+    bubbleWin.setAlwaysOnTop(alwaysOnTop)
+  }
+  bubbleWin.moveTop()
+  if (rememberPosition) {
+    writeState({ bubblePosition: { x: nx, y: ny } })
+  }
+}
+
 function restoreBubbleIfOffscreen() {
-  if (!bubbleWin) return
+  if (!bubbleWin || bubbleWin.isDestroyed()) return
   const [x, y] = bubbleWin.getPosition()
   const visible = screen
     .getAllDisplays()
@@ -1132,11 +1160,7 @@ function restoreBubbleIfOffscreen() {
         y < workArea.y + workArea.height,
     )
   if (!visible) {
-    const wa = screen.getPrimaryDisplay().workArea
-    bubbleWin.setPosition(
-      wa.x + wa.width - BUBBLE - 24,
-      wa.y + Math.round(wa.height * 0.4),
-    )
+    resetBubblePosition()
   }
 }
 
@@ -1154,9 +1178,24 @@ function buildTray() {
   tray.setToolTip("Bubble Chat — Messenger + Zalo")
   const menu = Menu.buildFromTemplate([
     {
-      label: "Show / Hide Bubble Chat",
-      click: () =>
-        bubbleWin?.isVisible() ? bubbleWin.hide() : bubbleWin?.show(),
+      label: "Show Bubble",
+      click: () => {
+        if (!bubbleWin || bubbleWin.isDestroyed()) {
+          createBubble()
+        } else {
+          bubbleWin.show()
+          restoreBubbleIfOffscreen()
+          bubbleWin.moveTop()
+        }
+      },
+    },
+    {
+      label: "Reset Bubble Position",
+      click: () => resetBubblePosition(),
+    },
+    {
+      label: "Toggle Panel",
+      click: () => togglePanel(),
     },
     { type: "separator" },
     { label: "Messenger", click: () => openProvider("messenger") },
@@ -1184,7 +1223,13 @@ function buildTray() {
     { label: "Quit Bubble Chat", click: () => app.quit() },
   ])
   tray.setContextMenu(menu)
-  tray.on("click", () => togglePanel())
+  tray.on("click", () => {
+    if (bubbleWin && !bubbleWin.isDestroyed() && !bubbleWin.isVisible()) {
+      bubbleWin.show()
+      bubbleWin.moveTop()
+    }
+    togglePanel()
+  })
 }
 
 function showBubbleContextMenu() {
@@ -1193,6 +1238,7 @@ function showBubbleContextMenu() {
     { label: "Open Messenger", click: () => openProvider("messenger") },
     { label: "Open Zalo", click: () => openProvider("zalo") },
     { type: "separator" },
+    { label: "Reset Bubble Position", click: () => resetBubblePosition() },
     { label: "Hide bubble", click: () => bubbleWin?.hide() },
     { label: "Settings…", click: () => openProvider("settings") },
     { type: "separator" },
@@ -1398,8 +1444,16 @@ ipcMain.on("open:external", (_e, url) => {
     shell.openExternal(url)
   }
 })
-ipcMain.on("bubble:show", () => bubbleWin?.show())
+ipcMain.on("bubble:show", () => {
+  if (!bubbleWin || bubbleWin.isDestroyed()) {
+    createBubble()
+  } else {
+    bubbleWin.show()
+    bubbleWin.moveTop()
+  }
+})
 ipcMain.on("bubble:hide", () => bubbleWin?.hide())
+ipcMain.on("bubble:resetPosition", resetBubblePosition)
 ipcMain.on("bubble:contextMenu", showBubbleContextMenu)
 ipcMain.on("provider:open", (_e, which) => openProvider(which))
 ipcMain.on("app:quit", () => app.quit())

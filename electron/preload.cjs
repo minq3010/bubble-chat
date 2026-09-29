@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld("desktop", {
   showContextMenu: () => ipcRenderer.send("bubble:contextMenu"),
   showBubble: () => ipcRenderer.send("bubble:show"),
   hideBubble: () => ipcRenderer.send("bubble:hide"),
+  resetBubblePosition: () => ipcRenderer.send("bubble:resetPosition"),
   openProvider: (which) => ipcRenderer.send("provider:open", which),
   quit: () => ipcRenderer.send("app:quit"),
   collapsePanel: () => ipcRenderer.send("panel:collapse"),

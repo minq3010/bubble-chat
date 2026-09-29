@@ -20,6 +20,7 @@ export const translations = {
     panelResetDesc: "Khôi phục bảng chat về vị trí hoặc kích thước mặc định.",
     resetPosBtn: "Đặt lại vị trí",
     resetSizeBtn: "Đặt lại kích thước",
+    resetBubblePosBtn: "Hiện lại bong bóng",
     advancedStorage: "Tùy chọn nâng cao",
     advancedStorageDesc: "Quản lý phiên đăng nhập và mở thư mục lưu trữ.",
     ramCurrent: "RAM đang dùng",
@@ -64,6 +65,9 @@ export const translations = {
       "Đưa bảng chat trở về vị trí mặc định bên cạnh bong bóng.",
     resetPanelSize: "Đặt lại kích thước bảng chat",
     resetPanelSizeDesc: "Khôi phục về kích thước mặc định ban đầu.",
+    resetBubblePosition: "Đặt lại vị trí bong bóng",
+    resetBubblePositionDesc:
+      "Đưa bong bóng trở lại màn hình chính nếu bị khuất hoặc ẩn.",
 
     // Appearance Settings
     themeMode: "Chế độ giao diện",
@@ -240,6 +244,7 @@ export const translations = {
     panelResetDesc: "Reset panel to default position or dimensions.",
     resetPosBtn: "Reset position",
     resetSizeBtn: "Reset size",
+    resetBubblePosBtn: "Restore bubble",
     advancedStorage: "Advanced Options",
     advancedStorageDesc: "Manage login sessions and open local storage folder.",
     ramCurrent: "RAM usage",
@@ -283,6 +288,9 @@ export const translations = {
       "Snap panel back to default position beside the bubble.",
     resetPanelSize: "Reset panel size",
     resetPanelSizeDesc: "Restore default panel dimensions.",
+    resetBubblePosition: "Reset bubble position",
+    resetBubblePositionDesc:
+      "Restore bubble to primary screen if hidden or offscreen.",
 
     // Appearance Settings
     themeMode: "Theme mode",
