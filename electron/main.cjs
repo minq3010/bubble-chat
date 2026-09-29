@@ -31,6 +31,7 @@ const {
   invalidateDirectorySize,
 } = require("./storage-utils.cjs")
 const releaseConfig = require("./release-config.json")
+const { ElectronBlocker } = require("@ghostery/adblocker-electron")
 const ENABLE_TOTP = app.isPackaged
   ? releaseConfig.totp === true
   : process.env.BUBBLE_ENABLE_TOTP === "true"
@@ -1903,8 +1904,49 @@ ipcMain.handle("update:openDownload", async () => {
   await shell.openExternal(url)
 })
 
+let adBlocker = null
+
+async function initAdBlocker() {
+  try {
+    const cacheDir = path.join(app.getPath("userData"), "adblocker")
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true })
+    }
+    const cachePath = path.join(cacheDir, "engine.bin")
+    adBlocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch, {
+      path: cachePath,
+      read: fs.promises.readFile,
+      write: fs.promises.writeFile,
+    })
+
+    const targetSessions = [
+      session.defaultSession,
+      session.fromPartition("persist:messenger"),
+      session.fromPartition("persist:zalo"),
+      session.fromPartition("persist:custom"),
+    ]
+
+    for (const ses of targetSessions) {
+      if (ses && !adBlocker.isBlockingEnabled(ses)) {
+        adBlocker.enableBlockingInSession(ses)
+      }
+    }
+  } catch (err) {
+    console.warn("[AdBlocker] Ghostery adblocker initialization warning:", err)
+  }
+}
+
+app.on("session-created", (ses) => {
+  if (adBlocker && !adBlocker.isBlockingEnabled(ses)) {
+    try {
+      adBlocker.enableBlockingInSession(ses)
+    } catch {}
+  }
+})
+
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
+  await initAdBlocker()
   if (app.isPackaged && components) {
     try {
       await components.whenReady([components.WIDEVINE_CDM_ID])
