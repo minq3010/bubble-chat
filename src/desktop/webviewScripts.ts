@@ -161,6 +161,27 @@ ${CORE_UNREAD_COMPUTE_CODE}
   let lastReported = -1;
   let lastSnippetSignature = "";
 
+  function cleanBidi(text) {
+    return String(text || "").replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "").trim();
+  }
+
+  function cleanNotificationPrefix(text, title) {
+    let s = cleanBidi(text);
+    const prefixRegex = /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)[:\uFF1A\s–—\-·]+/i;
+    for (let i = 0; i < 3; i++) {
+      const before = s;
+      s = s.replace(prefixRegex, "").trim();
+      if (title && s.toLowerCase().startsWith((title + ":").toLowerCase())) {
+        s = s.slice(title.length + 1).trim();
+      }
+      if (title && s.toLowerCase().startsWith((title + "：").toLowerCase())) {
+        s = s.slice(title.length + 1).trim();
+      }
+      if (s === before) break;
+    }
+    return s;
+  }
+
   function extractAndSendLatestSnippet(silent = false) {
     try {
       const host = (window.location.hostname || "").toLowerCase();
@@ -184,33 +205,31 @@ ${CORE_UNREAD_COMPUTE_CODE}
             ".conv-item-title__name, [class*='title__name'], [class*='conv-item-title'], .conv-item-title, [class*='title'], [class*='name']"
           );
           if (nameEl) {
-            title = (nameEl.textContent || nameEl.getAttribute("aria-label") || nameEl.getAttribute("title") || "").trim();
+            title = cleanNotificationPrefix(nameEl.textContent || nameEl.getAttribute("aria-label") || nameEl.getAttribute("title") || "");
           }
 
           const msgEl = target.querySelector(
             ".conv-message, .conv-message__text, [class*='conv-message'], [class*='conv-item__message'], [class*='last-message'], [class*='snippet'], [class*='preview'], [class*='msg-info']"
           );
           if (msgEl) {
-            body = (msgEl.textContent || msgEl.getAttribute("aria-label") || msgEl.getAttribute("title") || "").trim();
+            body = cleanBidi(msgEl.textContent || msgEl.getAttribute("aria-label") || msgEl.getAttribute("title") || "");
           }
 
           // If body or title missing, gather all distinct visible text nodes
           if (!body || !title) {
             const spans = Array.from(target.querySelectorAll("span, p, div"))
-              .map(el => (el.children.length === 0 ? el.textContent.trim() : ""))
+              .map(el => (el.children.length === 0 ? cleanBidi(el.textContent) : ""))
               .filter(t => t.length > 0 && !/^(\\d+:\\d+|\\d+\\s*(phút|giờ|ngày|m|h|d|min|hr|day|days)|vừa xong|just now|\\d+\\+?)$/i.test(t));
             const unique = [];
             for (const s of spans) {
               if (!unique.includes(s)) unique.push(s);
             }
-            if (!title && unique.length > 0) title = unique[0];
+            if (!title && unique.length > 0) title = cleanNotificationPrefix(unique[0]);
             const bodyCandidates = title ? unique.filter(t => t !== title) : unique.slice(1);
             if (!body && bodyCandidates.length > 0) body = bodyCandidates.join(" ").trim();
           }
 
-          if (title && body.toLowerCase().startsWith((title + ":").toLowerCase())) {
-            body = body.slice(title.length + 1).trim();
-          }
+          body = cleanNotificationPrefix(body, title);
 
           if (title || body) {
             payload = {
@@ -231,8 +250,8 @@ ${CORE_UNREAD_COMPUTE_CODE}
           const icon = (imgEl && imgEl.src && imgEl.src.startsWith("http")) ? imgEl.src : "";
 
           const spans = Array.from(unreadRow.querySelectorAll("span[dir='auto'], span"))
-            .map(s => s.textContent.trim())
-            .filter(t => t.length > 0 && !/^(unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới|\d+:\d+|\d+\s*(phút|giờ|ngày|m|h|d|min|hr|day|days)|vừa xong|just now|·):?$/i.test(t));
+            .map(s => cleanBidi(s.textContent))
+            .filter(t => t.length > 0 && !/^(unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|\d+:\d+|\d+\s*(phút|giờ|ngày|m|h|d|min|hr|day|days)|vừa xong|just now|·)[:\uFF1A\s–—\-·]*$/i.test(t));
 
           const unique = [];
           for (const s of spans) {
@@ -241,9 +260,9 @@ ${CORE_UNREAD_COMPUTE_CODE}
             }
           }
 
-          let title = unique.length > 0 ? unique[0] : "Messenger";
+          let title = unique.length > 0 ? cleanNotificationPrefix(unique[0]) : "Messenger";
           let body = unique.length > 1 ? unique.slice(1).join(" ").trim() : "";
-          body = body.replace(/^(?:unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)[:\s]+/i, "").trim();
+          body = cleanNotificationPrefix(body, title);
 
           if (title || body) {
             payload = {
@@ -370,11 +389,11 @@ ${CORE_UNREAD_COMPUTE_CODE}
 
   try {
     function parseNotificationPayload(title, options) {
-      let titleStr = String(title || "Tin nhắn mới").trim();
-      const rawBody = (options && options.body) ? String(options.body).trim() : "";
+      let titleStr = cleanBidi(title || "Tin nhắn mới");
+      const rawBody = (options && options.body) ? cleanBidi(options.body) : "";
       let bodyStr = rawBody;
-      const genericBody = /^(?:new messages?|unread messages?|new message|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)$/i.test(bodyStr);
-      const genericTitle = /^(?:zalo|messenger|new messages?|unread messages?|new message|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)$/i.test(titleStr);
+      const genericBody = /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)$/i.test(bodyStr);
+      const genericTitle = /^(?:zalo|messenger|unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)$/i.test(titleStr);
 
       if (genericTitle && bodyStr.includes(": ")) {
         const parts = bodyStr.split(/:\s+/);
@@ -389,9 +408,12 @@ ${CORE_UNREAD_COMPUTE_CODE}
         }
       }
 
+      titleStr = cleanNotificationPrefix(titleStr);
+      bodyStr = cleanNotificationPrefix(bodyStr, titleStr);
+
       return {
         title: titleStr || "Tin nhắn mới",
-        body: bodyStr.replace(/^(?:unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)[:\s]+/i, "").trim(),
+        body: bodyStr,
         icon: (options && options.icon) ? String(options.icon) : "",
       };
     }

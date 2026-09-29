@@ -161,7 +161,10 @@ function Segmented({
   value,
   onChange,
 }: {
-  options: { id: string; label: string }[]
+  options: {
+    id: string
+    label: string
+  }[]
   value: string
   onChange: (v: string) => void
 }) {
@@ -817,7 +820,10 @@ function PolicyItem({
   title,
   content,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string }>
+  icon: React.ComponentType<{
+    size?: number
+    className?: string
+  }>
   iconColor: string
   title: string
   content: string

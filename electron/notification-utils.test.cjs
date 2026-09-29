@@ -201,13 +201,33 @@ function evaluateNotificationPass(
 }
 
 // 4. Test Messenger Multi-span Text Extraction
+function cleanNotificationText(text, title = "") {
+  let s = String(text || "")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
+    .trim()
+  const prefixRegex =
+    /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)[:\uFF1A\s–—\-·]+/i
+  for (let i = 0; i < 3; i++) {
+    const before = s
+    s = s.replace(prefixRegex, "").trim()
+    if (title && s.toLowerCase().startsWith((title + ":").toLowerCase())) {
+      s = s.slice(title.length + 1).trim()
+    }
+    if (title && s.toLowerCase().startsWith((title + "：").toLowerCase())) {
+      s = s.slice(title.length + 1).trim()
+    }
+    if (s === before) break
+  }
+  return s
+}
+
 function extractMessengerSpans(rawSpans) {
   const spans = rawSpans
-    .map((s) => s.trim())
+    .map((s) => cleanNotificationText(s))
     .filter(
       (t) =>
         t.length > 0 &&
-        !/^(unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới|\d+:\d+|\d+\s*(phút|giờ|ngày|m|h|d|min|hr|day|days)|vừa xong|just now|·):?$/i.test(
+        !/^(unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới|\d+:\d+|\d+\s*(phút|giờ|ngày|m|h|d|min|hr|day|days)|vừa xong|just now|·)[:\uFF1A\s–—\-·]*$/i.test(
           t,
         ),
     )
@@ -222,14 +242,10 @@ function extractMessengerSpans(rawSpans) {
     }
   }
 
-  const title = unique.length > 0 ? unique[0] : "Messenger"
+  const title =
+    unique.length > 0 ? cleanNotificationText(unique[0]) : "Messenger"
   let body = unique.length > 1 ? unique.slice(1).join(" ").trim() : ""
-  body = body
-    .replace(
-      /^(?:unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)[:\s]+/i,
-      "",
-    )
-    .trim()
+  body = cleanNotificationText(body, title)
   return { title, body }
 }
 
@@ -258,6 +274,42 @@ function extractMessengerSpans(rawSpans) {
     "vừa xong",
   ]
   const res = extractMessengerSpans(unreadMsgRow)
+  assert.equal(res.title, "Thùy Vân")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating Facebook Messenger with hidden LTR Unicode marks (\u200E) from dir="auto"
+  const ltrRow = [
+    "\u200EThùy Vân",
+    "\u200EUnread message:Ko có em anh ăn ngon thế",
+    "vừa xong",
+  ]
+  const res = extractMessengerSpans(ltrRow)
+  assert.equal(res.title, "Thùy Vân")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating Facebook Messenger with directional embedding marks and full-width colon
+  const bidiRow = [
+    "Thùy Vân",
+    "\u202AUnread message：Ko có em anh ăn ngon thế\u202C",
+    "vừa xong",
+  ]
+  const res = extractMessengerSpans(bidiRow)
+  assert.equal(res.title, "Thùy Vân")
+  assert.equal(res.body, "Ko có em anh ăn ngon thế")
+}
+
+{
+  // Simulating multi-layer sender and unread prefix
+  const layeredRow = [
+    "Thùy Vân",
+    "Unread message: Thùy Vân: Ko có em anh ăn ngon thế",
+    "vừa xong",
+  ]
+  const res = extractMessengerSpans(layeredRow)
   assert.equal(res.title, "Thùy Vân")
   assert.equal(res.body, "Ko có em anh ăn ngon thế")
 }

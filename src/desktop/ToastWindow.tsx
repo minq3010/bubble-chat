@@ -143,9 +143,40 @@ export default function ToastWindow() {
     desktop()?.toastDismiss?.()
   }
 
+  const prefixRegex =
+    /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)[:\uFF1A\s–—\-·]+/i
+
+  const cleanTitle = (data.title || "")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
+    .replace(prefixRegex, "")
+    .trim()
+
+  let cleanBody = (data.body || "")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
+    .trim()
+  for (let i = 0; i < 3; i++) {
+    const before = cleanBody
+    cleanBody = cleanBody.replace(prefixRegex, "").trim()
+    if (
+      cleanTitle &&
+      cleanBody.toLowerCase().startsWith((cleanTitle + ":").toLowerCase())
+    ) {
+      cleanBody = cleanBody.slice(cleanTitle.length + 1).trim()
+    }
+    if (
+      cleanTitle &&
+      cleanBody.toLowerCase().startsWith((cleanTitle + "：").toLowerCase())
+    ) {
+      cleanBody = cleanBody.slice(cleanTitle.length + 1).trim()
+    }
+    if (cleanBody === before) break
+  }
+
+  const titleText =
+    cleanTitle || (data.provider === "zalo" ? "Zalo" : "Messenger")
   const bodyText =
-    data.body && data.body.trim()
-      ? data.body.trim()
+    cleanBody && cleanBody.trim()
+      ? cleanBody.trim()
       : t("newMessage") || "Tin nhắn mới"
 
   return (
@@ -189,7 +220,7 @@ export default function ToastWindow() {
         <div className="min-w-0 flex-1 pr-1">
           <div className="flex items-center justify-between gap-1">
             <span className="truncate text-[12.5px] font-semibold text-foreground leading-tight">
-              {data.title || (data.provider === "zalo" ? "Zalo" : "Messenger")}
+              {titleText}
             </span>
             <span className="shrink-0 font-mono text-[10px] text-muted-foreground/80">
               {t("justNow") || "vừa xong"}

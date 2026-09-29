@@ -1433,23 +1433,35 @@ ipcMain.on("settings:snapToEdge", (_e, enabled) => {
   snapToEdge = Boolean(enabled)
   writeState({ snapToEdge })
 })
+function cleanNotificationText(text, title = "") {
+  let s = String(text || "")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
+    .trim()
+  const prefixRegex =
+    /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)[:\uFF1A\s–—\-·]+/i
+  for (let i = 0; i < 3; i++) {
+    const before = s
+    s = s.replace(prefixRegex, "").trim()
+    if (title && s.toLowerCase().startsWith((title + ":").toLowerCase())) {
+      s = s.slice(title.length + 1).trim()
+    }
+    if (title && s.toLowerCase().startsWith((title + "：").toLowerCase())) {
+      s = s.slice(title.length + 1).trim()
+    }
+    if (s === before) break
+  }
+  return s
+}
+
 ipcMain.on("notification:incoming", (_e, payload) => {
   if (!payload || !payload.provider) return
   const state = readState()
   if (state.bubbleNotification === false) return
 
   const now = Date.now()
-  const cleanBody = (payload.body || "")
-    .replace(
-      /^(?:unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)[:\s]+/i,
-      "",
-    )
-    .replace(
-      /^(?:unread messages?|new messages?|new message|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)$/i,
-      "",
-    )
-    .trim()
-  const signature = `${payload.title || ""}::${cleanBody}`
+  const cleanTitle = cleanNotificationText(payload.title || "")
+  const cleanBody = cleanNotificationText(payload.body || "", cleanTitle)
+  const signature = `${cleanTitle}::${cleanBody}`
   const previous = recentNotifications.get(payload.provider)
   if (previous?.signature === signature && now - previous.timestamp < 700)
     return
@@ -1466,6 +1478,7 @@ ipcMain.on("notification:incoming", (_e, payload) => {
     const showPreview = state.bubbleShowMessagePreview !== false
     const finalPayload = {
       ...payload,
+      title: cleanTitle,
       body: showPreview ? cleanBody : "",
     }
     showBubbleToast(finalPayload)

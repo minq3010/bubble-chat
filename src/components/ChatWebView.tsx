@@ -9,6 +9,26 @@ import {
 import { useWebviewZoom } from "../hooks/useWebviewZoom"
 import type { Provider } from "./ChatPanelParts"
 
+function cleanNotificationText(text: string, title = ""): string {
+  let s = String(text || "")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
+    .trim()
+  const prefixRegex =
+    /^(?:unread messages?|new messages?|unseen messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn chưa xem|tin nhắn mới|các tin nhắn mới)[:\uFF1A\s–—\-·]+/i
+  for (let i = 0; i < 3; i++) {
+    const before = s
+    s = s.replace(prefixRegex, "").trim()
+    if (title && s.toLowerCase().startsWith((title + ":").toLowerCase())) {
+      s = s.slice(title.length + 1).trim()
+    }
+    if (title && s.toLowerCase().startsWith((title + "：").toLowerCase())) {
+      s = s.slice(title.length + 1).trim()
+    }
+    if (s === before) break
+  }
+  return s
+}
+
 export default function ChatWebView({
   provider,
   url,
@@ -129,16 +149,11 @@ export default function ChatWebView({
                 .trim()
               if (clean.includes(": ")) {
                 const parts = clean.split(/:\s+/)
-                const sender = parts[0].trim()
-                const message = parts
-                  .slice(1)
-                  .join(": ")
-                  .trim()
-                  .replace(
-                    /^(?:unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)[:\s]+/i,
-                    "",
-                  )
-                  .trim()
+                const sender = cleanNotificationText(parts[0].trim())
+                const message = cleanNotificationText(
+                  parts.slice(1).join(": ").trim(),
+                  sender,
+                )
                 if (sender || message) {
                   desktop()?.reportNotification?.({
                     provider,
@@ -176,15 +191,11 @@ export default function ChatWebView({
               : provider === "messenger"
                 ? "Messenger"
                 : "Tin nhắn mới"
-          const cleanBody = (data.body || "")
-            .replace(
-              /^(?:unread messages?|new messages?|các tin nhắn chưa đọc|tin nhắn chưa đọc|tin nhắn mới)[:\s]+/i,
-              "",
-            )
-            .trim()
+          const cleanTitle = cleanNotificationText(data.title || pName)
+          const cleanBody = cleanNotificationText(data.body || "", cleanTitle)
           desktop()?.reportNotification?.({
             provider,
-            title: data.title || pName,
+            title: cleanTitle,
             body: cleanBody,
             icon: data.icon || "",
           })
