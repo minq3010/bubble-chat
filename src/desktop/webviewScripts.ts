@@ -640,10 +640,123 @@ export const AD_BLOCK_SCRIPT = `(() => {
       if (!document.getElementById(styleId)) {
         const style = document.createElement("style");
         style.id = styleId;
-        style.textContent = ".ytp-ad-overlay-container, .ytp-ad-message-container, ytd-banner-promo-renderer, ytd-ad-slot-renderer, ytd-in-feed-ad-layout-renderer, #masthead-ad, ytd-rich-item-renderer:has(ytd-ad-slot-renderer) { display: none !important; }";
+        style.textContent = ".ytp-ad-overlay-container, .ytp-ad-message-container, ytd-banner-promo-renderer, ytd-ad-slot-renderer, ytd-in-feed-ad-layout-renderer, #masthead-ad, ytd-rich-item-renderer:has(ytd-ad-slot-renderer), .ad-showing .html5-video-container { visibility: hidden !important; }";
         (document.head || document.documentElement).appendChild(style);
       }
     } catch {}
+
+    // 1. Sanitize YouTube player response to remove mid-roll and pre-roll ad schedules at source (uBlock Origin pattern)
+    function freezeConstant(obj, prop, val) {
+      try {
+        Object.defineProperty(obj, prop, {
+          configurable: true,
+          enumerable: true,
+          get() { return val; },
+          set() { /* freeze constant */ },
+        });
+      } catch {
+        try { delete obj[prop]; } catch {}
+      }
+    }
+
+    function sanitizePlayerResponse(obj) {
+      if (!obj || typeof obj !== "object") return obj;
+      freezeConstant(obj, "adPlacements", undefined);
+      freezeConstant(obj, "adSlots", undefined);
+      freezeConstant(obj, "playerAds", undefined);
+      freezeConstant(obj, "adBreakHeartbeatParams", undefined);
+      if (obj.playerResponse && typeof obj.playerResponse === "object") {
+        sanitizePlayerResponse(obj.playerResponse);
+      }
+      return obj;
+    }
+
+    try {
+      if (window.ytInitialPlayerResponse) {
+        sanitizePlayerResponse(window.ytInitialPlayerResponse);
+      }
+      let currentYtInitialPlayerResponse = window.ytInitialPlayerResponse;
+      Object.defineProperty(window, "ytInitialPlayerResponse", {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return currentYtInitialPlayerResponse;
+        },
+        set(val) {
+          currentYtInitialPlayerResponse = sanitizePlayerResponse(val);
+        },
+      });
+    } catch {}
+
+    try {
+      if (window.playerResponse) {
+        sanitizePlayerResponse(window.playerResponse);
+      }
+      let currentYtPlayerResponse = window.playerResponse;
+      Object.defineProperty(window, "playerResponse", {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return currentYtPlayerResponse;
+        },
+        set(val) {
+          currentYtPlayerResponse = sanitizePlayerResponse(val);
+        },
+      });
+    } catch {}
+
+    // Intercept fetch for SPA navigation and player updates
+    if (typeof window.fetch === "function") {
+      const origFetch = window.fetch;
+      window.fetch = async function(...args) {
+        const url = typeof args[0] === "string" ? args[0] : (args[0] && args[0].url) || "";
+        const response = await origFetch.apply(this, args);
+        if (typeof url === "string" && (url.includes("/youtubei/v1/player") || url.includes("/get_video_info"))) {
+          try {
+            const clone = response.clone();
+            const text = await clone.text();
+            const data = JSON.parse(text);
+            if (data && (data.adPlacements || data.adSlots || data.playerAds)) {
+              sanitizePlayerResponse(data);
+              return new Response(JSON.stringify(data), {
+                status: response.status,
+                statusText: response.statusText,
+                headers: response.headers,
+              });
+            }
+          } catch {}
+        }
+        return response;
+      };
+    }
+
+    // Intercept XMLHttpRequest for player data
+    if (typeof XMLHttpRequest !== "undefined" && XMLHttpRequest.prototype) {
+      const origOpen = XMLHttpRequest.prototype.open;
+      const origSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+        this.__bubbleUrl = url;
+        return origOpen.call(this, method, url, ...rest);
+      };
+      XMLHttpRequest.prototype.send = function(...args) {
+        if (typeof this.__bubbleUrl === "string" && this.__bubbleUrl.includes("/youtubei/v1/player")) {
+          this.addEventListener("readystatechange", function() {
+            if (this.readyState === 4 && this.status === 200) {
+              try {
+                const data = JSON.parse(this.responseText);
+                if (data && (data.adPlacements || data.adSlots || data.playerAds)) {
+                  sanitizePlayerResponse(data);
+                  const modified = JSON.stringify(data);
+                  Object.defineProperty(this, "responseText", { value: modified });
+                  Object.defineProperty(this, "response", { value: modified });
+                }
+              } catch {}
+            }
+          });
+        }
+        return origSend.apply(this, args);
+      };
+    }
 
     function getVideoId() {
       const m = location.search.match(/[?&]v=([^&]+)/);
@@ -804,20 +917,18 @@ export const AD_BLOCK_SCRIPT = `(() => {
           }
           if (video) {
             if (!adMediaState) {
-              adMediaState = { muted: video.muted, playbackRate: video.playbackRate };
+              adMediaState = { muted: video.muted, opacity: video.style.opacity };
             }
             video.muted = true;
-            video.playbackRate = 16;
+            // Instantly hide ad frames visually - never show fast-forwarded ads!
+            video.style.opacity = "0";
 
             // Only seek if we are confident this is an ad video and not the main video:
             const mainDuration = (player && typeof player.getDuration === "function") ? player.getDuration() : 0;
             const isMainVideo = mainDuration > 0 && Number.isFinite(video.duration) && Math.abs(video.duration - mainDuration) < 1.0;
 
             if (!isMainVideo && Number.isFinite(video.duration) && video.duration > 0 && video.duration < 120) {
-              const targetTime = Math.max(0, video.duration - 0.1);
-              if (video.currentTime < targetTime - 0.2) {
-                try { video.currentTime = targetTime; } catch {}
-              }
+              try { video.currentTime = video.duration; } catch {}
             }
 
             if (video.paused) {
@@ -827,9 +938,8 @@ export const AD_BLOCK_SCRIPT = `(() => {
           }
         } else if (video && adMediaState) {
           video.muted = adMediaState.muted;
-          if (video.playbackRate > 2 || (adMediaState.playbackRate && video.playbackRate !== adMediaState.playbackRate)) {
-            video.playbackRate = adMediaState.playbackRate <= 2 ? adMediaState.playbackRate : 1;
-          }
+          video.style.opacity = adMediaState.opacity || "1";
+          video.playbackRate = 1;
           adMediaState = null;
           userPaused = false;
           ensurePlaying();

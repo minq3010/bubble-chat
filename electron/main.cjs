@@ -31,7 +31,10 @@ const {
   invalidateDirectorySize,
 } = require("./storage-utils.cjs")
 const releaseConfig = require("./release-config.json")
-const { ElectronBlocker } = require("@ghostery/adblocker-electron")
+const {
+  ElectronBlocker,
+  parseFilters,
+} = require("@ghostery/adblocker-electron")
 const ENABLE_TOTP = app.isPackaged
   ? releaseConfig.totp === true
   : process.env.BUBBLE_ENABLE_TOTP === "true"
@@ -1919,6 +1922,23 @@ async function initAdBlocker() {
       write: fs.promises.writeFile,
     })
 
+    const EXTRA_AD_RULES = [
+      "||youtube.com/api/stats/ads",
+      "||youtube.com/pagead",
+      "||youtube.com/get_midroll_info",
+      "||youtube.com/youtubei/v1/player/ad_break",
+      "||youtube.com/ptracking",
+      "||spclient.wg.spotify.com/ads",
+      "||spclient.wg.spotify.com/ad-logic",
+      "||googleads.g.doubleclick.net",
+      "||static.doubleclick.net/instream",
+    ].join("\n")
+
+    try {
+      const parsedExtra = parseFilters(EXTRA_AD_RULES)
+      adBlocker.update({ newNetworkFilters: parsedExtra.networkFilters })
+    } catch {}
+
     const targetSessions = [
       session.defaultSession,
       session.fromPartition("persist:messenger"),
@@ -1956,17 +1976,6 @@ app.whenReady().then(async () => {
       )
     }
   }
-  const AD_BLOCK_URLS = [
-    "*://*.doubleclick.net/*",
-    "*://*.googleads.g.doubleclick.net/*",
-    "*://*.googlesyndication.com/*",
-    "*://*.youtube.com/pagead/*",
-    "*://*.youtube.com/api/stats/ads*",
-    "*://*.youtube.com/get_midroll_info*",
-    "*://*.google-analytics.com/*",
-    "*://spclient.wg.spotify.com/ads/*",
-    "*://spclient.wg.spotify.com/ad-logic/*",
-  ]
   ;["persist:messenger", "persist:zalo", "persist:custom"].forEach(
     (partition) => {
       const ses = session.fromPartition(partition)
@@ -2003,15 +2012,6 @@ app.whenReady().then(async () => {
           }
         })
       })
-
-      try {
-        ses.webRequest.onBeforeRequest(
-          { urls: AD_BLOCK_URLS },
-          (_details, callback) => {
-            callback({ cancel: true })
-          },
-        )
-      } catch {}
     },
   )
 

@@ -328,6 +328,8 @@ export default function ChatWebView({
     view.addEventListener("did-fail-load", fail)
     view.addEventListener("page-title-updated", handleTitleUpdated)
     view.addEventListener("console-message", handleConsoleMessage)
+    view.addEventListener("did-navigate", applyAdBlock)
+    view.addEventListener("did-navigate-in-page", applyAdBlock)
 
     return () => {
       view.removeEventListener("dom-ready", onDomReady)
@@ -335,6 +337,8 @@ export default function ChatWebView({
       view.removeEventListener("did-fail-load", fail)
       view.removeEventListener("page-title-updated", handleTitleUpdated)
       view.removeEventListener("console-message", handleConsoleMessage)
+      view.removeEventListener("did-navigate", applyAdBlock)
+      view.removeEventListener("did-navigate-in-page", applyAdBlock)
     }
   }, [
     onStateChange,
