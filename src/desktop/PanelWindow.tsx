@@ -140,15 +140,34 @@ export default function PanelWindow() {
     >
       <ResizeHandles>
         <div
-          className="h-full w-full overflow-hidden rounded-[16px] border border-border/80 bg-panel"
+          className="relative h-full w-full overflow-hidden rounded-[16px] border border-border/80 bg-panel"
           style={{ opacity: opacity / 100 }}
         >
-          {isLocked ? (
-            <LockScreen onUnlocked={() => setIsLocked(false)} />
-          ) : view === "settings" ? (
-            <SettingsWindow onClose={() => desktop()?.openProvider(provider)} />
-          ) : (
+          <div
+            className={`h-full w-full ${
+              view === "settings" || isLocked
+                ? "invisible pointer-events-none"
+                : ""
+            }`}
+          >
             <ChatPanel initialProvider={provider} />
+          </div>
+
+          {view === "settings" && !isLocked && (
+            <div className="absolute inset-0 z-30 bg-panel">
+              <SettingsWindow
+                onClose={() => {
+                  setView("chat")
+                  desktop()?.openProvider(provider)
+                }}
+              />
+            </div>
+          )}
+
+          {isLocked && (
+            <div className="absolute inset-0 z-40 bg-panel">
+              <LockScreen onUnlocked={() => setIsLocked(false)} />
+            </div>
           )}
         </div>
       </ResizeHandles>

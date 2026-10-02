@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useMemo } from "react"
+import { useCallback, useEffect, useState, useMemo, useRef } from "react"
 import {
   RotateCw,
   RotateCcw,
@@ -70,10 +70,65 @@ export default function ChatPanel({
   const [tabContextMenu, setTabContextMenu] = useState<{
     x: number
     y: number
+    provider: Provider
   } | null>(null)
   const [visitedProviders, setVisitedProviders] = useState<Set<Provider>>(
     () => new Set([initialProvider]),
   )
+
+  const menuContainerRef = useRef<HTMLDivElement>(null)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const tabContextMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen && !tabContextMenu) return
+
+    const handlePointerDownOutside = (e: PointerEvent | MouseEvent) => {
+      const target = e.target as Node | null
+
+      if (menuOpen) {
+        if (
+          menuContainerRef.current &&
+          !menuContainerRef.current.contains(target) &&
+          menuButtonRef.current &&
+          !menuButtonRef.current.contains(target)
+        ) {
+          setMenuOpen(false)
+        }
+      }
+
+      if (tabContextMenu) {
+        if (
+          tabContextMenuRef.current &&
+          !tabContextMenuRef.current.contains(target)
+        ) {
+          setTabContextMenu(null)
+        }
+      }
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (menuOpen) setMenuOpen(false)
+        if (tabContextMenu) setTabContextMenu(null)
+      }
+    }
+
+    const handleBlur = () => {
+      if (menuOpen) setMenuOpen(false)
+      if (tabContextMenu) setTabContextMenu(null)
+    }
+
+    window.addEventListener("pointerdown", handlePointerDownOutside, true)
+    window.addEventListener("keydown", handleKeyDown)
+    window.addEventListener("blur", handleBlur)
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDownOutside, true)
+      window.removeEventListener("keydown", handleKeyDown)
+      window.removeEventListener("blur", handleBlur)
+    }
+  }, [menuOpen, tabContextMenu])
 
   const unread = useUnreadCounts()
   const [performanceMode, setPerformanceMode] = useState(
@@ -185,17 +240,23 @@ export default function ChatPanel({
     return () => window.clearTimeout(timer)
   }, [performanceMode, provider])
 
-  const openExternal = () => {
+  const openExternal = (targetProvider: Provider = provider) => {
     const url =
-      provider === "messenger"
+      targetProvider === "messenger"
         ? defaultMeta.messenger.url
-        : provider === "zalo"
+        : targetProvider === "zalo"
           ? defaultMeta.zalo.url
           : customTab?.url
     if (url) desktop()?.openExternal(url)
   }
 
-  const reload = () => setReloadKey((key) => key + 1)
+  const reload = (targetProvider: Provider = provider) => {
+    if (targetProvider !== provider) {
+      selectProvider(targetProvider)
+    }
+    setState("ready")
+    setReloadKey((key) => key + 1)
+  }
 
   const selectProvider = (next: Provider) => {
     setVisitedProviders((prev) => new Set(prev).add(next))
@@ -323,6 +384,15 @@ export default function ChatPanel({
             unread={unread.messenger}
             compact={isCompact}
             onClick={() => selectProvider("messenger")}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setTabContextMenu({
+                x: e.clientX,
+                y: e.clientY,
+                provider: "messenger",
+              })
+            }}
           />
           <ProviderTab
             provider="zalo"
@@ -330,6 +400,15 @@ export default function ChatPanel({
             unread={unread.zalo}
             compact={isCompact}
             onClick={() => selectProvider("zalo")}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setTabContextMenu({
+                x: e.clientX,
+                y: e.clientY,
+                provider: "zalo",
+              })
+            }}
           />
           {customTab && (
             <ProviderTab
@@ -344,7 +423,11 @@ export default function ChatPanel({
               onContextMenu={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                setTabContextMenu({ x: e.clientX, y: e.clientY })
+                setTabContextMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  provider: "custom",
+                })
               }}
             />
           )}
@@ -366,7 +449,7 @@ export default function ChatPanel({
             <>
               <button
                 type="button"
-                onClick={reload}
+                onClick={() => reload()}
                 title={t("reload")}
                 aria-label={t("reload")}
                 className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95 cursor-pointer"
@@ -375,7 +458,7 @@ export default function ChatPanel({
               </button>
               <button
                 type="button"
-                onClick={openExternal}
+                onClick={() => openExternal()}
                 title={t("openInBrowser")}
                 aria-label={t("openInBrowser")}
                 className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95 cursor-pointer"
@@ -398,20 +481,35 @@ export default function ChatPanel({
           {/* Options menu */}
           <div className="relative">
             <button
+              ref={menuButtonRef}
               onClick={() => setMenuOpen((open) => !open)}
               title={t("options")}
               aria-label={t("options")}
-              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95 cursor-pointer"
+              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95 cursor-pointer no-drag"
             >
               <MoreHorizontal size={13} />
             </button>
             {menuOpen && (
               <>
                 <div
-                  className="fixed inset-0 z-20"
-                  onClick={() => setMenuOpen(false)}
+                  className="fixed inset-0 z-20 bg-transparent no-drag"
+                  onMouseDown={(e) => {
+                    e.stopPropagation()
+                    setMenuOpen(false)
+                  }}
+                  onTouchStart={(e) => {
+                    e.stopPropagation()
+                    setMenuOpen(false)
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setMenuOpen(false)
+                  }}
                 />
-                <div className="absolute right-0 top-8 z-30 w-[200px] rounded-xl border border-border bg-card p-1 shadow-e3 animate-scale-in stagger-children">
+                <div
+                  ref={menuContainerRef}
+                  className="absolute right-0 top-8 z-30 w-[200px] rounded-xl border border-border bg-card p-1 shadow-e3 animate-scale-in stagger-children no-drag"
+                >
                   <button
                     onClick={() => {
                       reload()
@@ -562,6 +660,7 @@ export default function ChatPanel({
                   }
                   active={provider === item}
                   resizeToken={resizeToken}
+                  reloadToken={provider === item ? reloadKey : 0}
                   onStateChange={(nextState) => {
                     if (provider === item) {
                       setState(nextState)
@@ -584,10 +683,11 @@ export default function ChatPanel({
             }
             active
             resizeToken={resizeToken}
+            reloadToken={reloadKey}
             onStateChange={setState}
           />
         ) : (
-          <FailedState onReload={reload} />
+          <FailedState onReload={() => reload()} />
         )}
 
         {addModalOpen && (
@@ -605,18 +705,31 @@ export default function ChatPanel({
           />
         )}
 
-        {/* Quick switch context menu for 3rd tab */}
+        {/* Context menu for tabs */}
         {tabContextMenu && (
           <>
             <div
-              className="fixed inset-0 z-40 bg-transparent"
-              onClick={() => setTabContextMenu(null)}
+              className="fixed inset-0 z-40 bg-transparent no-drag"
+              onMouseDown={(e) => {
+                e.stopPropagation()
+                setTabContextMenu(null)
+              }}
+              onTouchStart={(e) => {
+                e.stopPropagation()
+                setTabContextMenu(null)
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                setTabContextMenu(null)
+              }}
               onContextMenu={(e) => {
                 e.preventDefault()
+                e.stopPropagation()
                 setTabContextMenu(null)
               }}
             />
             <div
+              ref={tabContextMenuRef}
               style={{
                 top: Math.min(
                   tabContextMenu.y + 6,
@@ -630,100 +743,141 @@ export default function ChatPanel({
                   ),
                 ),
               }}
-              className="fixed z-50 w-[230px] rounded-xl border border-border bg-card p-1 shadow-e3 text-foreground select-none animate-scale-in stagger-children"
+              className="fixed z-50 w-[230px] rounded-xl border border-border bg-card p-1 shadow-e3 text-foreground select-none animate-scale-in stagger-children no-drag"
             >
-              <div className="px-2.5 py-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
-                {t("switchTabQuickly")}
-              </div>
+              {tabContextMenu.provider === "custom" ? (
+                <>
+                  <div className="px-2.5 py-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                    {t("switchTabQuickly")}
+                  </div>
 
-              {ENTERTAINMENT_PRESETS.map((p) => {
-                const isCurrent = customTab?.url === p.url
-                const Icon = p.Icon || Globe
-                return (
+                  {ENTERTAINMENT_PRESETS.map((p) => {
+                    const isCurrent = customTab?.url === p.url
+                    const Icon = p.Icon || Globe
+                    return (
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => handleSwitchPreset(p)}
+                        className={`flex w-full items-center justify-between gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted cursor-pointer animate-fade-in ${
+                          isCurrent
+                            ? "bg-muted/60 text-foreground"
+                            : "text-foreground/90"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Icon size={16} style={{ color: p.color }} />
+                          <span>{p.name}</span>
+                        </div>
+                        {isCurrent && (
+                          <Check size={15} className="text-primary" />
+                        )}
+                      </button>
+                    )
+                  })}
+
+                  <div className="my-0.5 mx-2 border-t border-border/50" />
+
+                  <div className="px-2.5 py-1 text-[10.5px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                    {t("chatAndAi")}
+                  </div>
+
+                  {CHAT_PRESETS.slice(0, 3).map((p) => {
+                    const isCurrent = customTab?.url === p.url
+                    return (
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => handleSwitchPreset(p)}
+                        className={`flex w-full items-center justify-between gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted cursor-pointer animate-fade-in ${
+                          isCurrent
+                            ? "bg-muted/60 text-foreground"
+                            : "text-foreground/90"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Globe size={16} style={{ color: p.color }} />
+                          <span>{p.name}</span>
+                        </div>
+                        {isCurrent && (
+                          <Check size={15} className="text-primary" />
+                        )}
+                      </button>
+                    )
+                  })}
+
+                  <div className="my-0.5 mx-2 border-t border-border/50" />
+
                   <button
-                    key={p.name}
                     type="button"
-                    onClick={() => handleSwitchPreset(p)}
-                    className={`flex w-full items-center justify-between gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted cursor-pointer animate-fade-in ${
-                      isCurrent
-                        ? "bg-muted/60 text-foreground"
-                        : "text-foreground/90"
-                    }`}
+                    onClick={() => {
+                      setTabContextMenu(null)
+                      setAddModalOpen(true)
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium hover:bg-muted cursor-pointer text-foreground/90 animate-fade-in"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <Icon size={16} style={{ color: p.color }} />
-                      <span>{p.name}</span>
-                    </div>
-                    {isCurrent && <Check size={15} className="text-primary" />}
+                    <Plus size={15} className="text-muted-foreground" />
+                    <span>{t("switchCustomUrl")}</span>
                   </button>
-                )
-              })}
 
-              <div className="my-0.5 mx-2 border-t border-border/50" />
-
-              <div className="px-2.5 py-1 text-[10.5px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
-                {t("chatAndAi")}
-              </div>
-
-              {CHAT_PRESETS.slice(0, 3).map((p) => {
-                const isCurrent = customTab?.url === p.url
-                return (
                   <button
-                    key={p.name}
                     type="button"
-                    onClick={() => handleSwitchPreset(p)}
-                    className={`flex w-full items-center justify-between gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-muted cursor-pointer animate-fade-in ${
-                      isCurrent
-                        ? "bg-muted/60 text-foreground"
-                        : "text-foreground/90"
-                    }`}
+                    onClick={() => {
+                      setTabContextMenu(null)
+                      reload("custom")
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium hover:bg-muted cursor-pointer text-foreground/90 animate-fade-in"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <Globe size={16} style={{ color: p.color }} />
-                      <span>{p.name}</span>
-                    </div>
-                    {isCurrent && <Check size={15} className="text-primary" />}
+                    <RotateCw size={15} className="text-muted-foreground" />
+                    <span>{t("reload")}</span>
                   </button>
-                )
-              })}
 
-              <div className="my-0.5 mx-2 border-t border-border/50" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTabContextMenu(null)
+                      setConfirmRemove(true)
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-danger hover:bg-danger/10 cursor-pointer animate-fade-in"
+                  >
+                    <Trash2 size={15} />
+                    <span>{t("removeThisTab")}</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="px-2.5 py-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                    {defaultMeta[tabContextMenu.provider]?.name ||
+                      tabContextMenu.provider}
+                  </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setTabContextMenu(null)
-                  setAddModalOpen(true)
-                }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium hover:bg-muted cursor-pointer text-foreground/90 animate-fade-in"
-              >
-                <Plus size={15} className="text-muted-foreground" />
-                <span>{t("switchCustomUrl")}</span>
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const p = tabContextMenu.provider
+                      setTabContextMenu(null)
+                      reload(p)
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium hover:bg-muted cursor-pointer text-foreground/90 animate-fade-in"
+                  >
+                    <RotateCw size={15} className="text-muted-foreground" />
+                    <span>{t("reload")}</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setTabContextMenu(null)
-                  reload()
-                }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium hover:bg-muted cursor-pointer text-foreground/90 animate-fade-in"
-              >
-                <RotateCw size={15} className="text-muted-foreground" />
-                <span>{t("reload")}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setTabContextMenu(null)
-                  setConfirmRemove(true)
-                }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-danger hover:bg-danger/10 cursor-pointer animate-fade-in"
-              >
-                <Trash2 size={15} />
-                <span>{t("removeThisTab")}</span>
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const p = tabContextMenu.provider
+                      setTabContextMenu(null)
+                      openExternal(p)
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium hover:bg-muted cursor-pointer text-foreground/90 animate-fade-in"
+                  >
+                    <ExternalLink size={15} className="text-muted-foreground" />
+                    <span>{t("openInBrowser")}</span>
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}

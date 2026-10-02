@@ -9,7 +9,7 @@
 
   <p>
     <a href="https://github.com/minq3010/bubble-chat/releases/latest">
-      <img src="https://img.shields.io/badge/Release-v1.0.11-0084FF?style=flat-square" alt="Version 1.0.11" />
+      <img src="https://img.shields.io/badge/Release-v1.0.12-0084FF?style=flat-square" alt="Version 1.0.12" />
     </a>
     <img src="https://img.shields.io/badge/Platform-macOS_%7C_Windows_%7C_Linux-27272a?style=flat-square" alt="Platforms" />
     <img src="https://img.shields.io/badge/Stack-Electron_%E2%80%A2_React_%E2%80%A2_Vite-0284c7?style=flat-square" alt="Tech Stack" />
@@ -110,13 +110,13 @@
 <a id="tai-xuong"></a>
 ## Tải xuống
 
-Các gói cài đặt trực tiếp cho phiên bản **v1.0.11**:
+Các gói cài đặt trực tiếp cho phiên bản **v1.0.12**:
 
 | Nền tảng | Kiến trúc | Liên kết tải về | Định dạng |
 | :--- | :---: | :--- | :---: |
-| macOS | Apple Silicon (`arm64`) | [Tải về Bubble Chat cho macOS](https://github.com/minq3010/bubble-chat/releases/download/v1.0.11/Bubble-Chat-1.0.11-mac-arm64.dmg) | `.dmg` |
-| Windows | 64-bit (`x64`) | [Tải về Bubble Chat cho Windows](https://github.com/minq3010/bubble-chat/releases/download/v1.0.11/Bubble-Chat-1.0.11-win-x64.exe) | `.exe` |
-| Linux | Ubuntu / Debian (`amd64`) | [Tải về Bubble Chat cho Linux](https://github.com/minq3010/bubble-chat/releases/download/v1.0.11/Bubble-Chat-1.0.11-linux-amd64.deb) | `.deb` |
+| macOS | Apple Silicon (`arm64`) | [Tải về Bubble Chat cho macOS](https://github.com/minq3010/bubble-chat/releases/download/v1.0.12/Bubble-Chat-1.0.12-mac-arm64.dmg) | `.dmg` |
+| Windows | 64-bit (`x64`) | [Tải về Bubble Chat cho Windows](https://github.com/minq3010/bubble-chat/releases/download/v1.0.12/Bubble-Chat-1.0.12-win-x64.exe) | `.exe` |
+| Linux | Ubuntu / Debian (`amd64`) | [Tải về Bubble Chat cho Linux](https://github.com/minq3010/bubble-chat/releases/download/v1.0.12/Bubble-Chat-1.0.12-linux-amd64.deb) | `.deb` |
 
 > [!TIP]
 > Bạn có thể xem toàn bộ các bản phát hành và lịch sử cập nhật tại mục [Releases](https://github.com/minq3010/bubble-chat/releases).

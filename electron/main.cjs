@@ -1269,6 +1269,13 @@ function showWebContextMenu(target, params, popupWindow, includeNavigation) {
         click: () => target.goForward(),
       },
       { label: "Reload", click: () => target.reload() },
+      {
+        label: "Inspect Element",
+        click: () => {
+          target.inspectElement(params.x, params.y)
+          if (!target.isDevToolsOpened()) target.openDevTools()
+        },
+      },
       { type: "separator" },
     )
   }
@@ -1921,17 +1928,14 @@ async function initAdBlocker() {
       read: fs.promises.readFile,
       write: fs.promises.writeFile,
     })
+    // Disable cosmetic scriptlets: Ghostery's prebuilt scriptlets declare JSONPath in global scope
+    // causing Uncaught SyntaxError and RangeError: Maximum call stack size exceeded in YouTube's Polymer SPA.
+    // Network ad blocking remains 100% active.
+    adBlocker.config.loadCosmeticFilters = false
 
     const EXTRA_AD_RULES = [
-      "||youtube.com/api/stats/ads",
-      "||youtube.com/pagead",
-      "||youtube.com/get_midroll_info",
-      "||youtube.com/youtubei/v1/player/ad_break",
-      "||youtube.com/ptracking",
       "||spclient.wg.spotify.com/ads",
       "||spclient.wg.spotify.com/ad-logic",
-      "||googleads.g.doubleclick.net",
-      "||static.doubleclick.net/instream",
     ].join("\n")
 
     try {

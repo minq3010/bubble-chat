@@ -115,14 +115,39 @@ export default function ChatWebView({
   onStateChange,
   active,
   resizeToken,
+  reloadToken,
 }: {
   provider: Provider
   url: string
   onStateChange: (state: "ready" | "failed") => void
   active: boolean
   resizeToken: string
+  reloadToken?: number
 }) {
   const viewRef = useRef<HTMLElement>(null)
+  const prevReloadTokenRef = useRef(reloadToken)
+
+  useEffect(() => {
+    if (reloadToken && reloadToken !== prevReloadTokenRef.current) {
+      prevReloadTokenRef.current = reloadToken
+      const view = viewRef.current as HTMLElement & {
+        reload?: () => void
+        loadURL?: (targetUrl: string) => void
+      } | null
+      if (view && typeof view.reload === "function") {
+        try {
+          view.reload()
+        } catch {
+          if (typeof view.loadURL === "function" && url) {
+            try {
+              view.loadURL(url)
+            } catch {}
+          }
+        }
+      }
+    }
+  }, [reloadToken, url])
+
   const {
     zoomBadgeVisible,
     formattedZoomPercent,
